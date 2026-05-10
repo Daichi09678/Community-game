@@ -341,7 +341,7 @@ export default function SignUp() {
               <line x1="8" y1="14" x2="10.8" y2="14" stroke="#C8A96E" strokeWidth=".8"/>
               <line x1="17.2" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth=".8"/>
             </svg>
-            <span className="fc" style={{fontSize:'.95rem',fontWeight:700,color:'#C8A96E'}}>Trailblazer Hub</span>
+            <span className="fc" style={{fontSize:'.95rem',fontWeight:700,color:'#C8A96E'}}>Hoyoverse Hub</span>
           </Link>
           <div style={{display:'flex',alignItems:'center',gap:'.6rem'}}>
             <span style={{color:'#4A4540',fontSize:'.75rem',fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',marginRight:'.25rem'}}>Have an account?</span>
@@ -361,14 +361,14 @@ export default function SignUp() {
           <div className="fade-up d1" style={{width:'100%',maxWidth:280,display:'flex',flexDirection:'column',gap:'1.25rem'}}>
             <div>
               <div style={{fontSize:'.6rem',fontWeight:700,letterSpacing:'.2em',textTransform:'uppercase',color:'#4ECDC4',marginBottom:'.5rem'}}>Why join?</div>
-              <h2 className="fc" style={{fontSize:'1.1rem',fontWeight:700,lineHeight:1.3,color:'#E5DCC8'}}>Board the<br/><span className="tg">Astral Express</span></h2>
+              <h2 className="fc" style={{fontSize:'1.1rem',fontWeight:700,lineHeight:1.3,color:'#E5DCC8'}}>Across the<br/><span className="tg">Sea of Quanta</span></h2>
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:'.5rem'}}>
               {[
                 {icon:<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#C8A96E" strokeWidth="1.4"><polygon points="10,1 18,5 18,15 10,19 2,15 2,5"/><circle cx="10" cy="10" r="2.5"/></svg>, c:'#C8A96E', t:'Mission Reports', d:'Access 12,480+ curated quest guides'},
                 {icon:<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#4ECDC4" strokeWidth="1.4"><rect x="1" y="3" width="18" height="14" rx="1.5"/><line x1="1" y1="8" x2="19" y2="8"/><line x1="7" y1="12.5" x2="13" y2="12.5"/></svg>, c:'#4ECDC4', t:'Event Walkthroughs', d:'Never miss seasonal rewards again'},
-                {icon:<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#A855F7" strokeWidth="1.4"><polygon points="10,1 12.5,7 19,7 14,11 16,17.5 10,13.5 4,17.5 6,11 1,7 7.5,7"/></svg>, c:'#A855F7', t:'Earn XP & Ranks', d:'Rise through the Trailblazer leaderboard'},
-                {icon:<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#C8A96E" strokeWidth="1.4"><circle cx="7" cy="7" r="3.5"/><circle cx="14" cy="11" r="3"/><path d="M1 18C1 14.5 4 13 7 13" strokeLinecap="round"/><path d="M10.5 17C10.5 14.5 12 14 14 14" strokeLinecap="round"/></svg>, c:'#C8A96E', t:'31K+ Trailblazers', d:'Join the most active HSR community'},
+                {icon:<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#A855F7" strokeWidth="1.4"><polygon points="10,1 12.5,7 19,7 14,11 16,17.5 10,13.5 4,17.5 6,11 1,7 7.5,7"/></svg>, c:'#A855F7', t:'Earn XP & Ranks', d:'Ascend the Multiverse Leaderboard'},
+                {icon:<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#C8A96E" strokeWidth="1.4"><circle cx="7" cy="7" r="3.5"/><circle cx="14" cy="11" r="3"/><path d="M1 18C1 14.5 4 13 7 13" strokeLinecap="round"/><path d="M10.5 17C10.5 14.5 12 14 14 14" strokeLinecap="round"/></svg>, c:'#C8A96E', t:'31K+ Interdimensional Travelers', d:'Join the most active HoyoVerse community'},
               ].map((p,i)=>(
                 <div key={i} className="perk-item">
                   <div style={{width:26,height:26,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:`rgba(${p.c==='#C8A96E'?'200,169,110':p.c==='#4ECDC4'?'78,205,196':'168,85,247'},.1)`,clipPath:'polygon(4px 0,100% 0,calc(100% - 4px) 100%,0 100%)'}}>{p.icon}</div>
@@ -418,10 +418,10 @@ export default function SignUp() {
                   </div>
                   <div style={{clipPath:'polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%)',display:'inline-flex',alignItems:'center',gap:8,padding:'.3rem 1rem',border:'.5px solid rgba(200,169,110,.25)',background:'rgba(200,169,110,.05)',color:'#C8A96E',fontSize:'.62rem',fontWeight:700,letterSpacing:'.2em',textTransform:'uppercase',marginBottom:'.8rem'}}>
                     <span className="blink" style={{width:4,height:4,background:'#C8A96E',borderRadius:'50%',display:'inline-block'}}/>
-                    New Trailblazer Registration
+                    New HoYo-Explorer Registration
                   </div>
                   <h1 className="fc tg" style={{fontSize:'1.5rem',fontWeight:700,lineHeight:1.15,marginBottom:'.35rem'}}>Create Account</h1>
-                  <p style={{fontSize:'.8rem',color:'#4A4540',lineHeight:1.6}}>Your journey begins here, Trailblazer</p>
+                  <p style={{fontSize:'.8rem',color:'#4A4540',lineHeight:1.6}}>Your journey begins here, Player</p>
                 </div>
 
                 {/* Step indicator */}
@@ -736,7 +736,7 @@ export default function SignUp() {
                       </svg>
                       <div>
                         <div style={{fontSize:'.65rem',fontWeight:700,letterSpacing:'.12em',textTransform:'uppercase',color:'#A855F7',marginBottom:'.15rem'}}>Starting Rank</div>
-                        <div className="fc" style={{fontSize:'.85rem',fontWeight:700,color:'#E5DCC8'}}>Novice Trailblazer &nbsp;<span style={{color:'#A855F7'}}>LV.1</span></div>
+                        <div className="fc" style={{fontSize:'.85rem',fontWeight:700,color:'#E5DCC8'}}>Novice Omni-Voyager &nbsp;<span style={{color:'#A855F7'}}>LV.1</span></div>
                       </div>
                       <div style={{marginLeft:'auto',clipPath:'polygon(4px 0,100% 0,calc(100% - 4px) 100%,0 100%)',padding:'.2rem .7rem',background:'rgba(168,85,247,.1)',border:'.5px solid rgba(168,85,247,.3)',color:'#A855F7',fontSize:'.6rem',fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase'}}>+50 XP</div>
                     </div>

@@ -159,7 +159,7 @@ export default function Landing() {
               <line x1="8" y1="14" x2="10.8" y2="14" stroke="#C8A96E" strokeWidth=".8"/>
               <line x1="17.2" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth=".8"/>
             </svg>
-            <span className="fc" style={{fontSize:'.95rem',fontWeight:700,color:'#C8A96E'}}>Trailblazer Hub</span>
+            <span className="fc" style={{fontSize:'.95rem',fontWeight:700,color:'#C8A96E'}}>Hoyoverse Hub</span>
           </a>
           <div className="nav-links">
             {[['#hero','Home'],['#features','Platform Features'],['#how-it-works','How It Works'],['#categories','Content Categories'],['#community-voices','Community Voices']].map(([h,l])=>(
@@ -181,14 +181,15 @@ export default function Landing() {
           <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse 65% 55% at 50% 40%,rgba(200,169,110,.05) 0%,transparent 70%)',pointerEvents:'none'}}/>
           <div style={{clipPath:CLIP.eyebrow,display:'inline-flex',alignItems:'center',gap:10,padding:'.4rem 1.2rem',border:'.5px solid rgba(78,205,196,.3)',background:'rgba(78,205,196,.06)',color:'#4ECDC4',fontSize:'.65rem',fontWeight:700,letterSpacing:'.2em',textTransform:'uppercase',marginBottom:'2.5rem'}}>
             <span className="blink" style={{width:5,height:5,background:'#4ECDC4',borderRadius:'50%',display:'inline-block'}}/>
-            Version 3.2 — Live Now
+            Version New — Live Now
           </div>
           <h1 className="fc" style={{fontSize:'clamp(2.6rem,5.5vw,4.8rem)',fontWeight:900,lineHeight:1.04,letterSpacing:'.03em',marginBottom:'1.5rem'}}>
-            <span style={{display:'block',color:'#E5DCC8'}}>The Trailblazer's</span>
+            <span style={{display:'block',color:'#E5DCC8'}}>The Passenger</span>
             <span className="tg" style={{display:'block'}}>Chronicle Hub</span>
           </h1>
           <p style={{maxWidth:520,fontSize:'1rem',lineHeight:1.75,color:'#8A8070',marginBottom:'2.5rem'}}>
-            The definitive community knowledge base for Honkai: Star Rail. Mission reports, event guides, and puzzle solutions — curated by Trailblazers, for Trailblazers.
+           The One-Stop Community for the HoYoverse.
+           Find the most comprehensive guides on everything from exploring Teyvat, traveling interstellar on the Astral Express, fighting in New Eridu, to the epic tales of the Valkyries. Mission reports, event guides, and puzzle solutions—curated by experts to ensure your journey is unstoppable.
           </p>
           <div style={{display:'flex',gap:'.85rem',justifyContent:'center',flexWrap:'wrap',marginBottom:'4.5rem'}}>
             <button
@@ -219,7 +220,7 @@ export default function Landing() {
         <section id="features" style={{position:'relative',zIndex:1,padding:'4rem 2.5rem'}}>
           <div style={{textAlign:'center',marginBottom:'3.5rem'}}>
             <span style={{display:'block',fontSize:'.6rem',fontWeight:700,letterSpacing:'.22em',textTransform:'uppercase',color:'#C8A96E',marginBottom:'.75rem'}}>Platform Features</span>
-            <h2 className="fc" style={{fontSize:'clamp(1.5rem,2.8vw,2.2rem)',fontWeight:700,lineHeight:1.2,color:'#E5DCC8'}}>Everything You Need on the Rails</h2>
+            <h2 className="fc" style={{fontSize:'clamp(1.5rem,2.8vw,2.2rem)',fontWeight:700,lineHeight:1.2,color:'#E5DCC8'}}>Everything You Need In Hoyoworld</h2>
           </div>
           <div className="feat-grid" style={{maxWidth:1060,margin:'0 auto',border:'.5px solid rgba(200,169,110,.13)',overflow:'hidden',clipPath:CLIP.lg}}>
             {([
@@ -353,8 +354,8 @@ export default function Landing() {
           <div className="cta-borders" style={{clipPath:CLIP.xl,position:'relative',maxWidth:760,margin:'0 auto',background:'#0B1121',border:'.5px solid rgba(200,169,110,.2)',padding:'4.5rem 4rem',textAlign:'center',overflow:'hidden'}}>
             <div className="cta-glow"/>
             <span style={{display:'block',fontSize:'.6rem',fontWeight:700,letterSpacing:'.22em',textTransform:'uppercase',color:'#C8A96E',marginBottom:'1rem'}}>Ready to Begin?</span>
-            <h2 className="fc" style={{fontSize:'clamp(1.5rem,2.8vw,2.2rem)',fontWeight:700,lineHeight:1.2,color:'#E5DCC8',marginBottom:'.85rem'}}>Board the Astral Express</h2>
-            <p style={{fontSize:'.95rem',lineHeight:1.72,color:'#8A8070',maxWidth:460,margin:'0 auto 2.25rem'}}>Join over 31,000 Trailblazers sharing knowledge across the galaxy. Your next great discovery is one report away.</p>
+            <h2 className="fc" style={{fontSize:'clamp(1.5rem,2.8vw,2.2rem)',fontWeight:700,lineHeight:1.2,color:'#E5DCC8',marginBottom:'.85rem'}}>Across the Sea of Quanta</h2>
+            <p style={{fontSize:'.95rem',lineHeight:1.72,color:'#8A8070',maxWidth:460,margin:'0 auto 2.25rem'}}>Join over 31,000 Player sharing knowledge across the imaginary. Your next great discovery is one report away.</p>
             <div style={{display:'flex',gap:'.85rem',justifyContent:'center',flexWrap:'wrap'}}>
               <button className="fr btn-primary" style={{clipPath:CLIP.hero,padding:'.8rem 2.2rem',background:'linear-gradient(135deg,#7A5A24,#C8A96E)',border:'none',color:'#060911',fontSize:'.88rem',fontWeight:700,letterSpacing:'.13em',textTransform:'uppercase'}}>Get Started Free</button>
               <button className="fr btn-outline" style={{clipPath:CLIP.hero,padding:'.8rem 2.2rem',background:'transparent',border:'.5px solid rgba(200,169,110,.35)',color:'#C8A96E',fontSize:'.88rem',fontWeight:700,letterSpacing:'.13em',textTransform:'uppercase'}}>Browse Reports</button>
@@ -369,13 +370,13 @@ export default function Landing() {
 
         {/* FOOTER */}
         <footer style={{position:'relative',zIndex:1,borderTop:'.5px solid rgba(200,169,110,.13)',padding:'2rem 2.5rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'1rem'}}>
-          <div className="fc" style={{fontSize:'.85rem',fontWeight:700,color:'#7A5A24'}}>Trailblazer Hub</div>
+          <div className="fc" style={{fontSize:'.85rem',fontWeight:700,color:'#7A5A24'}}>Hoyoverse Hub</div>
           <div style={{display:'flex',gap:'1.5rem'}}>
             {['About','Guidelines','Discord','Privacy'].map(l=>(
               <a key={l} href="#" className="footer-link">{l}</a>
             ))}
           </div>
-          <div className="fm" style={{fontSize:'.62rem',color:'#4A4540'}}>© 2025 Trailblazer Hub · v3.2</div>
+          <div className="fm" style={{fontSize:'.62rem',color:'#4A4540'}}>© 2025 Hoyoverse Hub · The Our Journey</div>
         </footer>
 
       </div>

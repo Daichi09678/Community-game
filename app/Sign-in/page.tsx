@@ -191,7 +191,7 @@ export default function SignIn() {
               <line x1="8" y1="14" x2="10.8" y2="14" stroke="#C8A96E" strokeWidth=".8"/>
               <line x1="17.2" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth=".8"/>
             </svg>
-            <span className="fc" style={{fontSize:'.95rem',fontWeight:700,color:'#C8A96E'}}>Trailblazer Hub</span>
+            <span className="fc" style={{fontSize:'.95rem',fontWeight:700,color:'#C8A96E'}}>Hoyoverse Hub</span>
           </Link>
           <div style={{display:'flex',gap:'.6rem'}}>
             <span style={{color:'#4A4540',fontSize:'.75rem',fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',alignSelf:'center',marginRight:'.25rem'}}>No account?</span>
@@ -344,7 +344,7 @@ export default function SignIn() {
                         </span>
                       ) : (
                         <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-                          Board the Express
+                          Ready To Journey
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round">
                             <path d="M3 8h10M9 4l4 4-4 4"/>
                           </svg>
