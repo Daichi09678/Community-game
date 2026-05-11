@@ -382,7 +382,7 @@ export default function AllReportPage() {
         <nav className="flex-1 px-4 py-5">
           <NavGroupLabel>Main</NavGroupLabel>
 
-          <NavItem href="/UserHoyo/homepage" active={false}>
+          <NavItem href="/UserHoyo/dashboard" active={false}>
             <GridIcon />
             Dashboard
           </NavItem>
@@ -395,19 +395,19 @@ export default function AllReportPage() {
 
           <NavGroupLabel>Category</NavGroupLabel>
 
-          <NavItem active={filterType === 'mission'} onClick={() => handleCategoryFilter('mission')}>
+          <NavItem href="/UserHoyo/mission&quest" active={false}>
             <HexDotIcon />
             Mission &amp; Quest
             <NavBadge>482</NavBadge>
           </NavItem>
 
-          <NavItem active={filterType === 'event'} onClick={() => handleCategoryFilter('event')}>
+           <NavItem href="/UserHoyo/event" active={false}>
             <CalendarIcon />
             Event Seasonal
             <NavBadge variant="new">New</NavBadge>
           </NavItem>
 
-          <NavItem active={filterType === 'puzzle'} onClick={() => handleCategoryFilter('puzzle')}>
+           <NavItem href="/UserHoyo/puzzle" active={false}>
             <DiamondIcon />
             Puzzle &amp; Riddles
             <NavBadge>324</NavBadge>
@@ -415,22 +415,22 @@ export default function AllReportPage() {
 
           <NavGroupLabel>Community</NavGroupLabel>
 
-          <NavItem active={false}>
+          <NavItem href= "/UserHoyo/discussion" active= {false}>
             <UsersIcon />
             Discussion
           </NavItem>
 
-          <NavItem active={false}>
+          <NavItem href= "/UserHoyo/leaderboard" active= {false}>
             <StarIcon />
             Leaderboard
           </NavItem>
 
-          <NavItem active={false}>
+         <NavItem href= "/UserHoyo/profie" active= {false}>
             <PersonIcon />
             My Profile
           </NavItem>
 
-          <NavItem active={false}>
+          <NavItem href= "/UserHoyo/settings" active= {false}>
             <InfoIcon />
             Settings
           </NavItem>

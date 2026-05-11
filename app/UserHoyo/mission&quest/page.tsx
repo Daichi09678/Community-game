@@ -535,15 +535,15 @@ export default function MissionQuestPage() {
           <NavItem href="/UserHoyo/all-report" active={false}><HexIcon /> All Reports <NavBadge>1.2K</NavBadge></NavItem>
 
           <NavGroupLabel>Category</NavGroupLabel>
-          <NavItem href="/UserHoyo/mission-quest" active={true}><HexDotIcon /> Mission &amp; Quest <NavBadge>482</NavBadge></NavItem>
+          <NavItem active={true}><HexDotIcon /> Mission &amp; Quest <NavBadge>482</NavBadge></NavItem>
           <NavItem href="/UserHoyo/event" active={false}><CalendarIcon /> Event Seasonal <NavBadge variant="new">New</NavBadge></NavItem>
           <NavItem href="/UserHoyo/puzzle" active={false}><DiamondIcon /> Puzzle &amp; Riddles <NavBadge>324</NavBadge></NavItem>
 
           <NavGroupLabel>Community</NavGroupLabel>
-          <NavItem active={false}><UsersIcon /> Discussion</NavItem>
-          <NavItem active={false}><StarIcon /> Leaderboard</NavItem>
-          <NavItem active={false}><PersonIcon /> My Profile</NavItem>
-          <NavItem active={false}><InfoIcon /> Settings</NavItem>
+          <NavItem href = "/UserHoyo/discussion"active={false}><UsersIcon /> Discussion</NavItem>
+          <NavItem href = "/UserHoyoleaderboard"active={false}><StarIcon /> Leaderboard</NavItem>
+          <NavItem href = "/UserHoyo/profil"active={false}><PersonIcon /> My Profile</NavItem>
+          <NavItem href = "/UserHoyo/settings"active={false}><InfoIcon /> Settings</NavItem>
         </nav>
 
         <div className="px-5 py-5 border-t border-[rgba(200,169,110,0.15)]">
