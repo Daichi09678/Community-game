@@ -687,7 +687,7 @@ export default function EventSeasonalPage() {
         <nav className="flex-1 px-4 py-5">
           <NavGroupLabel>Main</NavGroupLabel>
           <NavItem href="/UserHoyo/dashboard" active={false}><GridIcon />Dashboard</NavItem>
-          <NavItem href="/" active={false}><HexIcon />All Reports<NavBadge>1.2K</NavBadge></NavItem>
+          <NavItem href="/UserHoyo/all-report" active={false}><HexIcon />All Reports<NavBadge>1.2K</NavBadge></NavItem>
           <NavGroupLabel>Category</NavGroupLabel>
           <NavItem href="/UserHoyo/mission&quest" active={false}><HexDotIcon />Mission &amp; Quest<NavBadge>482</NavBadge></NavItem>
           <NavItem active={true}><CalendarIcon />Event Seasonal<NavBadge variant="new">New</NavBadge></NavItem>

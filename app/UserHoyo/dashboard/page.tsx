@@ -426,7 +426,7 @@ export default function Dashboard() {
             <NavBadge variant="new">New</NavBadge>
           </NavItem>
 
-          <NavItem href="/UserHoyo/puzzle&ridldles" active={false}>
+          <NavItem href="/UserHoyo/puzzle" active={false}>
             <DiamondIcon /> Puzzle &amp; Riddles
             <NavBadge>324</NavBadge>
           </NavItem>
@@ -434,7 +434,7 @@ export default function Dashboard() {
           <NavGroupLabel>Community</NavGroupLabel>
 
           <NavItem href="/UserHoyo/discussion"active={false}><UsersIcon /> Discussion</NavItem>
-          <NavItem href="/UserHoyo/leadearboard" active={false}><StarIcon />  Leaderboard</NavItem>
+          <NavItem href="/UserHoyo/leaderboard" active={false}><StarIcon />  Leaderboard</NavItem>
           <NavItem href="/UserHoyo/profile"active={false}><PersonIcon /> My Profile</NavItem>
           <NavItem href="/UserHoyo/settings"active={false}><InfoIcon />  Settings</NavItem>
         </nav>

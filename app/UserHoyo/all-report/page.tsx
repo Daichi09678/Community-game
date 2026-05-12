@@ -425,7 +425,7 @@ export default function AllReportPage() {
             Leaderboard
           </NavItem>
 
-         <NavItem href= "/UserHoyo/profie" active= {false}>
+         <NavItem href= "/UserHoyo/profile" active= {false}>
             <PersonIcon />
             My Profile
           </NavItem>

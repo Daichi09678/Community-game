@@ -531,7 +531,7 @@ export default function MissionQuestPage() {
 
         <nav className="flex-1 px-4 py-5">
           <NavGroupLabel>Main</NavGroupLabel>
-          <NavItem href="/UserHoyo/homepage" active={false}><GridIcon /> Dashboard</NavItem>
+          <NavItem href="/UserHoyo/dashboard" active={false}><GridIcon /> Dashboard</NavItem>
           <NavItem href="/UserHoyo/all-report" active={false}><HexIcon /> All Reports <NavBadge>1.2K</NavBadge></NavItem>
 
           <NavGroupLabel>Category</NavGroupLabel>
@@ -541,7 +541,7 @@ export default function MissionQuestPage() {
 
           <NavGroupLabel>Community</NavGroupLabel>
           <NavItem href = "/UserHoyo/discussion"active={false}><UsersIcon /> Discussion</NavItem>
-          <NavItem href = "/UserHoyoleaderboard"active={false}><StarIcon /> Leaderboard</NavItem>
+          <NavItem href = "/UserHoyo/leaderboard"active={false}><StarIcon /> Leaderboard</NavItem>
           <NavItem href = "/UserHoyo/profil"active={false}><PersonIcon /> My Profile</NavItem>
           <NavItem href = "/UserHoyo/settings"active={false}><InfoIcon /> Settings</NavItem>
         </nav>
