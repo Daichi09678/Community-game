@@ -1,12 +1,19 @@
-import { clipBtn } from '@/components/utils/styles';
+'use client';
 
-export function Topbar() {
+import { clipBtn } from '@/components/utils/styles';
+import { GameFilter, gameLabels } from '@/components/utils/constants';
+
+interface TopbarProps {
+  activeGame: GameFilter;  // ← Tambahkan ini
+}
+
+export function Topbar({ activeGame }: TopbarProps) {  // ← Terima props
   return (
     <div className="flex items-center justify-between px-8 py-4 border-b border-[rgba(200,169,110,0.15)] sticky top-0 z-40 backdrop-blur-[10px]" style={{ background: 'rgba(5,8,16,0.8)' }}>
       <div>
         <div className="font-['Cinzel',serif] text-[1rem] font-semibold text-[#E8E0CC]">Hoyoverse Hub — Dashboard</div>
         <div className="text-[#5A5248] text-[0.75rem] mt-[2px]">
-          All Games · Last updated: 3 hours ago
+          {gameLabels[activeGame]} · Last updated: 3 hours ago
         </div>
       </div>
       <div className="flex gap-[10px] items-center">

@@ -9,11 +9,25 @@ import { ReportsSection } from '@/components/dashboard/ReportsSection';
 import { RightWidgets } from '@/components/dashboard/RightWidgets';
 import { reportsData, GameFilter, TypeFilter, gameAccentMap } from '@/utils';
 
+// Tipe yang sesuai dengan data di constants.ts
+interface ReportItem {
+  title: string;
+  type: string;
+  game: string;
+  author: string;
+  initials: string;
+  rating: number;
+  votes: number;
+  date: string;
+  version: string;
+}
+
 export default function DashboardClient() {
   const [activeFilter, setActiveFilter] = useState<TypeFilter>('all');
   const [activeGame, setActiveGame] = useState<GameFilter>('all');
 
-  const filteredReports = reportsData.filter(r => {
+  // Hapus tipe parameter, biarkan TypeScript infer secara otomatis
+  const filteredReports = reportsData.filter((r) => {
     const matchGame = activeGame === 'all' || r.game === activeGame;
     const matchType = activeFilter === 'all' || r.type === activeFilter;
     return matchGame && matchType;
@@ -31,7 +45,6 @@ export default function DashboardClient() {
       className="flex min-h-screen overflow-x-hidden"
       style={{ background: '#050810', color: '#E8E0CC', fontFamily: "'Rajdhani', sans-serif" }}
     >
-      {/* BG gradients */}
       <div className="fixed inset-0 pointer-events-none z-0" style={{
         background: `
           radial-gradient(ellipse 60% 50% at 80% 20%, rgba(123,79,166,0.06) 0%, transparent 60%),
@@ -61,16 +74,6 @@ export default function DashboardClient() {
           </div>
         </div>
       </main>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space+Mono&display=swap');
-        @media (max-width: 1100px) {
-          main > div > div:last-child { grid-template-columns: 1fr !important; }
-        }
-        @media (max-width: 768px) {
-          main { margin-left: 0 !important; }
-        }
-      `}</style>
     </div>
   );
 }

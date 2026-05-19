@@ -542,7 +542,7 @@ export default function MissionQuestPage() {
           <NavGroupLabel>Community</NavGroupLabel>
           <NavItem href = "/UserHoyo/discussion"active={false}><UsersIcon /> Discussion</NavItem>
           <NavItem href = "/UserHoyo/leaderboard"active={false}><StarIcon /> Leaderboard</NavItem>
-          <NavItem href = "/UserHoyo/profil"active={false}><PersonIcon /> My Profile</NavItem>
+          <NavItem href = "/UserHoyo/profile"active={false}><PersonIcon /> My Profile</NavItem>
           <NavItem href = "/UserHoyo/settings"active={false}><InfoIcon /> Settings</NavItem>
         </nav>
 
