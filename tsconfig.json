@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -10,21 +14,50 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "sourceMap": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
-      "@/*": ["./*"],
-      "@/components/*": ["./components/*"],
-      "@/utils": ["./components/utils"],
-      "@/utils/*": ["./components/utils/*"],
-      "@/common": ["./components/common"],
-      "@/common/*": ["./components/common/*"],
-      "@/dashboard": ["./components/dashboard"],
-      "@/dashboard/*": ["./components/dashboard/*"]
-    }
+      "@/*": [
+        "./*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/utils": [
+        "./components/utils"
+      ],
+      "@/utils/*": [
+        "./components/utils/*"
+      ],
+      "@/common": [
+        "./components/common"
+      ],
+      "@/common/*": [
+        "./components/common/*"
+      ],
+      "@/dashboard": [
+        "./components/dashboard"
+      ],
+      "@/dashboard/*": [
+        "./components/dashboard/*"
+      ]
+    },
+    "target": "ES2017"
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

@@ -12,4 +12,4 @@ export const app = new Elysia({ prefix: '/api' })
 export type App = typeof app  // ← tambah ini
 
 export const GET = app.fetch
-export const POST = app.fetch
+export const POST = app.fetch   
