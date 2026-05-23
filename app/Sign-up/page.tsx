@@ -13,28 +13,26 @@ const CLIP = {
 };
 
 type Step = 1 | 2 | 3 | 4;
-
 const OTP_LENGTH = 6;
 
 export default function SignUp() {
-  const [step, setStep]           = useState<Step>(1);
-  const [username, setUsername]   = useState('');
-  const [email, setEmail]         = useState('');
-  const [password, setPassword]   = useState('');
-  const [confirm, setConfirm]     = useState('');
-  const [showPass, setShowPass]   = useState(false);
-  const [showConf, setShowConf]   = useState(false);
-  const [focusField, setFocus]    = useState<string|null>(null);
-  const [agreed, setAgreed]       = useState(false);
-  const [loading, setLoading]     = useState(false);
+  const [step, setStep] = useState<Step>(1);
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [showConf, setShowConf] = useState(false);
+  const [focusField, setFocus] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // OTP state
-  const [otp, setOtp]             = useState<string[]>(Array(OTP_LENGTH).fill(''));
-  const [otpError, setOtpError]   = useState('');
+  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [otpError, setOtpError] = useState('');
   const [otpVerified, setOtpVerified] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [resendLoading, setResendLoading]   = useState(false);
-  const otpRefs = useRef<(HTMLInputElement|null)[]>([]);
+  const [resendLoading, setResendLoading] = useState(false);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Countdown timer for resend
   useEffect(() => {
@@ -43,10 +41,55 @@ export default function SignUp() {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
+  // ---------- API calls ----------
+  const api = {
+    sendOTP: async (email: string) => {
+      const res = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      return res.json();
+    },
+    resendOTP: async (email: string) => {
+      const res = await fetch('/api/otp/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      return res.json();
+    },
+    verifyOTP: async (email: string, code: string) => {
+      const res = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+      return res.json();
+    },
+    signUp: async (username: string, email: string, password: string) => {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password }),
+      });
+      return res.json();
+    },
+    signIn: async (email: string, password: string) => {
+      const res = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      return res.json();
+    },
+  };
+
+  // ---------- Password strength ----------
   const passwordStrength = (): { score: number; label: string; color: string } => {
     if (!password) return { score: 0, label: '', color: 'transparent' };
     let score = 0;
-    if (password.length >= 8)  score++;
+    if (password.length >= 8) score++;
     if (password.length >= 12) score++;
     if (/[A-Z]/.test(password)) score++;
     if (/[0-9]/.test(password)) score++;
@@ -60,17 +103,31 @@ export default function SignUp() {
   const passwordsMatch   = confirm.length > 0 && password === confirm;
   const passwordsMismatch = confirm.length > 0 && password !== confirm;
 
-  const handleNext = (e: React.FormEvent) => {
+  // ---------- Handlers ----------
+  const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (step === 1) { setStep(2); }
-    else if (step === 2) {
-      // Go to OTP step — trigger send
-      setOtp(Array(OTP_LENGTH).fill(''));
-      setOtpError('');
-      setOtpVerified(false);
-      setResendCooldown(60);
-      setStep(3);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+    if (step === 1) {
+      setStep(2);
+    } else if (step === 2) {
+      setLoading(true);
+      try {
+        const result = await api.sendOTP(email);
+        if (result.error) {
+          alert(result.error);
+          return;
+        }
+        if (result.devOTP) console.log('Dev OTP:', result.devOTP);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        setOtpError('');
+        setOtpVerified(false);
+        setResendCooldown(60);
+        setStep(3);
+        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      } catch (err) {
+        alert('Failed to send OTP');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -88,10 +145,14 @@ export default function SignUp() {
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === 'Backspace') {
       if (otp[index]) {
-        const next = [...otp]; next[index] = ''; setOtp(next);
+        const next = [...otp];
+        next[index] = '';
+        setOtp(next);
       } else if (index > 0) {
         otpRefs.current[index - 1]?.focus();
-        const next = [...otp]; next[index - 1] = ''; setOtp(next);
+        const next = [...otp];
+        next[index - 1] = '';
+        setOtp(next);
       }
     } else if (e.key === 'ArrowLeft' && index > 0) {
       otpRefs.current[index - 1]?.focus();
@@ -110,40 +171,74 @@ export default function SignUp() {
     otpRefs.current[focusIdx]?.focus();
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = otp.join('');
-    if (code.length < OTP_LENGTH) { setOtpError('Please enter all 6 digits.'); return; }
-    // Simulate verification — treat "000000" as wrong, anything else as correct
+    if (code.length < OTP_LENGTH) {
+      setOtpError('Please enter all 6 digits.');
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (code === '000000') {
-        setOtpError('Invalid code. Please try again.');
+    try {
+      const result = await api.verifyOTP(email, code);
+      if (result.error) {
+        setOtpError(result.error);
       } else {
         setOtpVerified(true);
         setTimeout(() => setStep(4), 600);
       }
-    }, 1200);
+    } catch (err) {
+      setOtpError('Verification failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResend = () => {
+  // 🔥 PERBAIKAN: handleResend menggunakan api.resendOTP
+  const handleResend = async () => {
     if (resendCooldown > 0) return;
     setResendLoading(true);
-    setOtp(Array(OTP_LENGTH).fill(''));
-    setOtpError('');
-    setTimeout(() => {
+    try {
+      const result = await api.resendOTP(email);
+      if (result.error) {
+        alert(result.error);
+      } else {
+        if (result.devOTP) console.log('New OTP:', result.devOTP);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        setOtpError('');
+        setResendCooldown(60);
+        otpRefs.current[0]?.focus();
+      }
+    } catch (err) {
+      alert('Failed to resend');
+    } finally {
       setResendLoading(false);
-      setResendCooldown(60);
-      otpRefs.current[0]?.focus();
-    }, 800);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) return;
     setLoading(true);
-    setTimeout(() => setLoading(false), 2000);
+    try {
+      const signUpResult = await api.signUp(username, email, password);
+      if (signUpResult.error) {
+        alert(signUpResult.error);
+        return;
+      }
+
+      const signInResult = await api.signIn(email, password);
+      if (signInResult.error) {
+        alert('Account created but auto-login failed. Please sign in manually.');
+        window.location.href = '/Sign-in';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch (err) {
+      alert('Sign up failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const borderColor = (field: string) =>
@@ -152,8 +247,8 @@ export default function SignUp() {
     focusField === field ? '0 0 0 2px rgba(200,169,110,.1)' : 'none';
 
   const steps = ['Identity', 'Cipher', 'Verify', 'Manifest'];
-
   const otpFilled = otp.every(d => d !== '');
+
 
   return (
     <>
