@@ -17,12 +17,39 @@ export default function SignIn() {
   const [showPass, setShowPass] = useState(false);
   const [focusField, setFocus]  = useState<string|null>(null);
   const [loading, setLoading]   = useState(false);
-  const [checked, setChecked]   = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // API call untuk sign in
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => setLoading(false), 1800);
+    
+    try {
+      const response = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Penting untuk menerima cookie
+        body: JSON.stringify({ 
+          email, 
+          password, 
+          rememberMe 
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        alert(result.error);
+      } else {
+        // Login berhasil, redirect ke dashboard
+        window.location.href = '/UserHoyo/dashboard';
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      alert('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const borderColor = (field: string) =>
@@ -113,7 +140,7 @@ export default function SignIn() {
         /* Social btn */
         .social-btn{
           display:flex;align-items:center;justify-content:center;gap:.6rem;
-          width:100%;padding:'.7rem 1rem';background:rgba(200,169,110,.05);
+          width:100%;padding:.7rem 1rem;background:rgba(200,169,110,.05);
           border:.5px solid rgba(200,169,110,.14);color:#8A8070;
           font-family:'Rajdhani',sans-serif;font-size:.8rem;font-weight:700;
           letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
@@ -125,7 +152,7 @@ export default function SignIn() {
 
         /* Submit btn */
         .submit-btn{
-          width:100%;padding:'.85rem';
+          width:100%;padding:.85rem;
           background:linear-gradient(135deg,#7A5A24,#C8A96E);
           border:none;color:#060911;
           font-family:'Rajdhani',sans-serif;font-size:.9rem;font-weight:700;
@@ -207,11 +234,6 @@ export default function SignIn() {
         {/* MAIN */}
         <main style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'3rem 1.5rem'}}>
 
-          {/* Left panel — decorative, hidden on small screens */}
-          <div style={{display:'none'}} className="left-panel">
-            {/* intentionally hidden; shown via media query if desired */}
-          </div>
-
           {/* Card */}
           <div className="fade-up" style={{width:'100%',maxWidth:440,position:'relative'}}>
 
@@ -229,7 +251,6 @@ export default function SignIn() {
 
                 {/* Header */}
                 <div className="fade-up fade-up-1" style={{textAlign:'center',marginBottom:'2rem'}}>
-                  {/* Icon */}
                   <div style={{display:'flex',justifyContent:'center',marginBottom:'1.1rem'}}>
                     <div style={{width:48,height:48,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(200,169,110,.08)',border:'.5px solid rgba(200,169,110,.2)',clipPath:'polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)'}}>
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C8A96E" strokeWidth="1.4">
@@ -320,9 +341,9 @@ export default function SignIn() {
 
                   {/* Remember me */}
                   <div className="fade-up fade-up-4" style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.6rem'}}>
-                    <label className="cb-wrap" onClick={()=>setChecked(!checked)}>
-                      <div className={`cb-box${checked?' checked':''}`}>
-                        {checked && (
+                    <label className="cb-wrap" onClick={()=>setRememberMe(!rememberMe)}>
+                      <div className={`cb-box${rememberMe?' checked':''}`}>
+                        {rememberMe && (
                           <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#C8A96E" strokeWidth="1.8" strokeLinecap="round">
                             <polyline points="1.5,5 4,7.5 8.5,2"/>
                           </svg>

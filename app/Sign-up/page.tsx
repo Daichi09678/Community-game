@@ -216,30 +216,65 @@ export default function SignUp() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!agreed) return;
-    setLoading(true);
-    try {
-      const signUpResult = await api.signUp(username, email, password);
-      if (signUpResult.error) {
-        alert(signUpResult.error);
-        return;
-      }
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!agreed) return;
+  setLoading(true);
+  try {
+    // 1. Sign Up
+    const signUpResponse = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password }),
+    });
 
-      const signInResult = await api.signIn(email, password);
-      if (signInResult.error) {
-        alert('Account created but auto-login failed. Please sign in manually.');
-        window.location.href = '/Sign-in';
-      } else {
-        window.location.href = '/dashboard';
-      }
-    } catch (err) {
-      alert('Sign up failed');
-    } finally {
-      setLoading(false);
+    const signUpText = await signUpResponse.text();
+    console.log('Signup raw response:', signUpText);
+
+    if (!signUpText || signUpText.trim() === '') {
+      throw new Error('Server returned empty response on signup');
     }
-  };
+
+    const signUpResult = JSON.parse(signUpText);
+
+    if (signUpResult.error) {
+      alert(signUpResult.error);
+      return;
+    }
+
+    console.log('Signup success:', signUpResult);
+
+    // 2. Sign In (auto-login)
+    const signInResponse = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    });
+
+    const signInText = await signInResponse.text();
+    console.log('Signin raw response:', signInText);
+
+    if (!signInText || signInText.trim() === '') {
+      throw new Error('Server returned empty response on signin');
+    }
+
+    const signInResult = JSON.parse(signInText);
+
+    if (signInResult.error) {
+      alert('Account created but auto-login failed. Please sign in manually.');
+      window.location.href = '/Sign-in';
+    } else {
+      // Redirect ke dashboard
+      window.location.href = '/UserHoyo/dashboard';
+    }
+  } catch (err) {
+    console.error('Sign up error detail:', err);
+    alert('Sign up failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+  } finally {
+    setLoading(false);
+  }
+};
 
   const borderColor = (field: string) =>
     focusField === field ? 'rgba(200,169,110,.55)' : 'rgba(200,169,110,.15)';

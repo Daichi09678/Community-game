@@ -113,17 +113,164 @@ const app = new Elysia({ prefix: '/api' })
   
   // ========== SIGN UP ==========
   .post('/auth/signup', async ({ body, set }) => {
-    // ... kode signup (sudah ada) ...
+    try {
+      const { username, email, password } = body;
+
+      console.log('📝 Signup attempt:', { username, email });
+
+      if (username.length < 3) {
+        set.status = 400;
+        return { error: 'Username minimal 3 karakter' };
+      }
+      if (password.length < 8) {
+        set.status = 400;
+        return { error: 'Password minimal 8 karakter' };
+      }
+
+      const verifiedOtp = await db.select()
+        .from(otpCodes)
+        .where(
+          and(
+            eq(otpCodes.email, email),
+            eq(otpCodes.isUsed, true)
+          )
+        );
+
+      if (verifiedOtp.length === 0) {
+        set.status = 400;
+        return { error: 'Email belum diverifikasi. Verifikasi dulu dengan kode OTP.' };
+      }
+
+      const existingEmail = await db.select().from(users).where(eq(users.email, email));
+      if (existingEmail.length > 0) {
+        set.status = 400;
+        return { error: 'Email sudah terdaftar' };
+      }
+
+      const existingUsername = await db.select().from(users).where(eq(users.username, username));
+      if (existingUsername.length > 0) {
+        set.status = 400;
+        return { error: 'Username sudah dipakai' };
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const userId = randomUUID();
+
+      await db.insert(users).values({
+        id: userId,
+        username,
+        email,
+        password: hashedPassword,
+        isVerified: true,
+        role: 'user',
+        rank: 'Novice Omni-Voyager',
+        level: 1,
+        xp: 0,
+      });
+
+      await db.delete(otpCodes).where(eq(otpCodes.email, email));
+
+      console.log('✅ User created successfully:', userId);
+
+      return {
+        message: 'Akun berhasil dibuat',
+        user: { id: userId, username, email, rank: 'Novice Omni-Voyager', level: 1 }
+      };
+    } catch (error) {
+      console.error('❌ Signup error:', error);
+      set.status = 500;
+      return { error: error instanceof Error ? error.message : 'Internal server error' };
+    }
+  }, {
+    body: t.Object({
+      username: t.String({ minLength: 3 }),
+      email: t.String({ format: 'email' }),
+      password: t.String({ minLength: 8 })
+    })
   })
   
   // ========== SIGN IN ==========
   .post('/auth/signin', async ({ body, set, cookie: { token } }) => {
-    // ... kode signin (sudah ada) ...
+    try {
+      const { email, password } = body;
+
+      const user = await db.select().from(users).where(eq(users.email, email));
+      if (user.length === 0) {
+        set.status = 401;
+        return { error: 'Email atau password salah' };
+      }
+
+      const validPassword = await verifyPassword(password, user[0].password);
+      if (!validPassword) {
+        set.status = 401;
+        return { error: 'Email atau password salah' };
+      }
+
+      const jwtToken = await generateToken(user[0].id, user[0].email);
+      token.set({
+        value: jwtToken,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60,
+        path: '/',
+      });
+
+      console.log('✅ User signed in:', user[0].email);
+
+      return {
+        message: 'Login berhasil',
+        user: {
+          id: user[0].id,
+          username: user[0].username,
+          email: user[0].email,
+          rank: user[0].rank,
+          level: user[0].level,
+        }
+      };
+    } catch (error) {
+      console.error('❌ Signin error:', error);
+      set.status = 500;
+      return { error: 'Internal server error' };
+    }
+  }, {
+    body: t.Object({
+      email: t.String({ format: 'email' }),
+      password: t.String()
+    })
   })
   
   // ========== GET CURRENT USER ==========
   .get('/auth/me', async ({ cookie: { token }, set }) => {
-    // ... kode get user (sudah ada) ...
+    try {
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Tidak terotentikasi' };
+      }
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Token tidak valid' };
+      }
+      const user = await db.select().from(users).where(eq(users.id, payload.userId));
+      if (user.length === 0) {
+        set.status = 404;
+        return { error: 'User tidak ditemukan' };
+      }
+      return {
+        id: user[0].id,
+        username: user[0].username,
+        email: user[0].email,
+        rank: user[0].rank,
+        level: user[0].level,
+        xp: user[0].xp,
+      };
+    } catch (error) {
+      console.error('❌ Get user error:', error);
+      set.status = 500;
+      return { error: 'Internal server error' };
+    }
   })
   
   // ========== SIGN OUT ==========
