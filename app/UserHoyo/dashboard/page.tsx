@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import DashboardClient from '@/components/dashboard/DashboardClient';
+import { LoadingAnimation } from '@/components/ui';
 
 export const metadata = {
   title: 'Dashboard - Hoyoverse Hub',
@@ -8,11 +9,7 @@ export const metadata = {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen" style={{ background: '#050810' }}>
-        <div className="text-[#C8A96E] font-['Cinzel',serif] text-xl">Loading Dashboard...</div>
-      </div>
-    }>
+    <Suspense fallback={<LoadingAnimation message="LOADING DASHBOARD..." />}>
       <DashboardClient />
     </Suspense>
   );

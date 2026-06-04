@@ -18,8 +18,10 @@ const CLIP = {
 
 export default function Landing() {
   const [bgScene, setBgScene] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const handleScroll = () => {
       const h = document.documentElement.scrollHeight - window.innerHeight;
       if (h <= 0) return;
@@ -39,6 +41,17 @@ export default function Landing() {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // Jika belum mounted, return null atau placeholder untuk mencegah hydration mismatch
+  if (!mounted) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#050810' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: '#050810', zIndex: 100, padding: '1rem' }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -132,137 +145,139 @@ export default function Landing() {
         }
       `}</style>
 
-      {/* ── BACKGROUND SCENES ── */}
-
-      {/* Scene 0: Astral Express */}
-      <svg className={`bg-scene${bgScene===0?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <rect width="1440" height="900" fill="#030614"/>
-        {Array.from({length:90}).map((_,i)=>(
-          <circle key={i} cx={(i*163.5)%1440} cy={(i*97.7)%900} r={i%9===0?2.2:i%4===0?1.5:0.9} fill={i%5===0?'#C8A96E':i%7===0?'#4ECDC4':'#ffffff'} opacity={0.15+((i*0.053)%0.55)}/>
-        ))}
-        <g transform="translate(160,490)">
-          <rect x="0" y="0" width="740" height="90" rx="6" fill="#070f22" stroke="#C8A96E" strokeWidth="1.2"/>
-          <rect x="0" y="22" width="740" height="46" fill="none" stroke="#1a2840" strokeWidth="0.5"/>
-          <circle cx="44" cy="45" r="32" fill="#0a1830" stroke="#C8A96E" strokeWidth="1.5"/>
-          <circle cx="44" cy="45" r="18" fill="#C8A96E" opacity="0.12"/>
-          <circle cx="696" cy="45" r="32" fill="#0a1830" stroke="#C8A96E" strokeWidth="1.5"/>
-          <circle cx="696" cy="45" r="18" fill="#C8A96E" opacity="0.12"/>
-          <rect x="88" y="8" width="140" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
-          <rect x="244" y="8" width="140" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
-          <rect x="400" y="8" width="140" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
-          <rect x="556" y="8" width="120" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
-          <rect x="120" y="28" width="80" height="8" rx="2" fill="rgba(200,169,110,.12)"/>
-          <rect x="120" y="42" width="60" height="6" rx="2" fill="rgba(200,169,110,.07)"/>
-          <rect x="120" y="54" width="70" height="6" rx="2" fill="rgba(200,169,110,.07)"/>
-          <rect x="276" y="28" width="80" height="8" rx="2" fill="rgba(78,205,196,.1)"/>
-          <rect x="276" y="42" width="60" height="6" rx="2" fill="rgba(78,205,196,.06)"/>
-          <polygon points="0,0 -70,22 -70,68 0,90" fill="#070f22" stroke="#C8A96E" strokeWidth="1"/>
-          <polygon points="740,0 810,22 810,68 740,90" fill="#070f22" stroke="#C8A96E" strokeWidth="1"/>
-          <line x1="-70" y1="45" x2="-160" y2="45" stroke="#C8A96E" strokeWidth="0.5" opacity="0.35"/>
-          <line x1="810" y1="45" x2="920" y2="45" stroke="#C8A96E" strokeWidth="0.5" opacity="0.35"/>
-          <line x1="-160" y1="45" x2="-160" y2="100" stroke="#C8A96E" strokeWidth="0.5" opacity="0.2"/>
-          <line x1="920" y1="45" x2="920" y2="100" stroke="#C8A96E" strokeWidth="0.5" opacity="0.2"/>
-        </g>
-        <g opacity="0.12">
-          {Array.from({length:22}).map((_,i)=>(
-            <line key={i} x1={i*80-20} y1="580" x2={i*80+20} y2="660" stroke="#C8A96E" strokeWidth="0.5"/>
+      {/* ── BACKGROUND SCENES ── Tambahkan suppressHydrationWarning */}
+      <div suppressHydrationWarning>
+        {/* Scene 0: Astral Express */}
+        <svg className={`bg-scene${bgScene===0?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <rect width="1440" height="900" fill="#030614"/>
+          {Array.from({length:90}).map((_,i)=>(
+            <circle key={i} cx={(i*163.5)%1440} cy={(i*97.7)%900} r={i%9===0?2.2:i%4===0?1.5:0.9} fill={i%5===0?'#C8A96E':i%7===0?'#4ECDC4':'#ffffff'} opacity={0.15+((i*0.053)%0.55)}/>
           ))}
-          <line x1="0" y1="580" x2="1440" y2="580" stroke="#C8A96E" strokeWidth="0.4"/>
-          <line x1="0" y1="660" x2="1440" y2="660" stroke="#C8A96E" strokeWidth="0.4"/>
-        </g>
-        <radialGradient id="ae-vign" cx="50%" cy="50%" r="70%">
-          <stop offset="0%" stopColor="transparent"/>
-          <stop offset="100%" stopColor="#030614"/>
-        </radialGradient>
-        <rect width="1440" height="900" fill="url(#ae-vign)" opacity="0.55"/>
-        <text x="720" y="820" textAnchor="middle" fontFamily="serif" fontSize="11" fill="#C8A96E" opacity="0.22" letterSpacing="5">ASTRAL EXPRESS · INTERSTELLAR JOURNEY</text>
-      </svg>
-
-      {/* Scene 1: Genshin / Teyvat */}
-      <svg className={`bg-scene${bgScene===1?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <rect width="1440" height="900" fill="#04091a"/>
-        {Array.from({length:130}).map((_,i)=>(
-          <circle key={i} cx={(i*173)%1440} cy={(i*103)%900} r={i%11===0?2.5:i%5===0?1.8:0.9} fill={i%7===0?'#A8D8F0':i%4===0?'#F5D78A':'#ffffff'} opacity={0.12+((i*0.045)%0.65)}/>
-        ))}
-        <polygon points="720,110 738,165 796,165 749,198 767,253 720,220 673,253 691,198 644,165 702,165" fill="none" stroke="#F5D78A" strokeWidth="1.8" opacity="0.38"/>
-        <polygon points="720,122 734,162 774,162 743,183 754,223 720,200 686,223 697,183 666,162 706,162" fill="#F5D78A" opacity="0.04"/>
-        {[0,45,90,135,180,225,270,315].map((angle,i)=>(
-          <g key={i} transform={`rotate(${angle},720,180)`}>
-            <line x1="720" y1="85" x2="720" y2="105" stroke="#F5D78A" strokeWidth="1.2" opacity="0.3"/>
+          <g transform="translate(160,490)">
+            <rect x="0" y="0" width="740" height="90" rx="6" fill="#070f22" stroke="#C8A96E" strokeWidth="1.2"/>
+            <rect x="0" y="22" width="740" height="46" fill="none" stroke="#1a2840" strokeWidth="0.5"/>
+            <circle cx="44" cy="45" r="32" fill="#0a1830" stroke="#C8A96E" strokeWidth="1.5"/>
+            <circle cx="44" cy="45" r="18" fill="#C8A96E" opacity="0.12"/>
+            <circle cx="696" cy="45" r="32" fill="#0a1830" stroke="#C8A96E" strokeWidth="1.5"/>
+            <circle cx="696" cy="45" r="18" fill="#C8A96E" opacity="0.12"/>
+            <rect x="88" y="8" width="140" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
+            <rect x="244" y="8" width="140" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
+            <rect x="400" y="8" width="140" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
+            <rect x="556" y="8" width="120" height="74" rx="4" fill="#09162e" stroke="rgba(200,169,110,.25)" strokeWidth="0.5"/>
+            <rect x="120" y="28" width="80" height="8" rx="2" fill="rgba(200,169,110,.12)"/>
+            <rect x="120" y="42" width="60" height="6" rx="2" fill="rgba(200,169,110,.07)"/>
+            <rect x="120" y="54" width="70" height="6" rx="2" fill="rgba(200,169,110,.07)"/>
+            <rect x="276" y="28" width="80" height="8" rx="2" fill="rgba(78,205,196,.1)"/>
+            <rect x="276" y="42" width="60" height="6" rx="2" fill="rgba(78,205,196,.06)"/>
+            <polygon points="0,0 -70,22 -70,68 0,90" fill="#070f22" stroke="#C8A96E" strokeWidth="1"/>
+            <polygon points="740,0 810,22 810,68 740,90" fill="#070f22" stroke="#C8A96E" strokeWidth="1"/>
+            <line x1="-70" y1="45" x2="-160" y2="45" stroke="#C8A96E" strokeWidth="0.5" opacity="0.35"/>
+            <line x1="810" y1="45" x2="920" y2="45" stroke="#C8A96E" strokeWidth="0.5" opacity="0.35"/>
+            <line x1="-160" y1="45" x2="-160" y2="100" stroke="#C8A96E" strokeWidth="0.5" opacity="0.2"/>
+            <line x1="920" y1="45" x2="920" y2="100" stroke="#C8A96E" strokeWidth="0.5" opacity="0.2"/>
           </g>
-        ))}
-        <circle cx="720" cy="180" r="60" fill="none" stroke="#F5D78A" strokeWidth="0.4" opacity="0.15"/>
-        <circle cx="720" cy="180" r="90" fill="none" stroke="#A8D8F0" strokeWidth="0.4" opacity="0.1"/>
-        <ellipse cx="720" cy="700" rx="520" ry="90" fill="none" stroke="#3A6A4A" strokeWidth="0.6" opacity="0.25"/>
-        <ellipse cx="720" cy="720" rx="360" ry="60" fill="#0a1f10" opacity="0.35"/>
-        <ellipse cx="360" cy="650" rx="120" ry="40" fill="none" stroke="#A8D8F0" strokeWidth="0.4" opacity="0.15"/>
-        <ellipse cx="1080" cy="620" rx="100" ry="35" fill="none" stroke="#A8D8F0" strokeWidth="0.4" opacity="0.15"/>
-        <radialGradient id="gi-vign" cx="50%" cy="50%" r="70%">
-          <stop offset="0%" stopColor="transparent"/>
-          <stop offset="100%" stopColor="#04091a"/>
-        </radialGradient>
-        <rect width="1440" height="900" fill="url(#gi-vign)" opacity="0.5"/>
-        <text x="720" y="820" textAnchor="middle" fontFamily="serif" fontSize="11" fill="#F5D78A" opacity="0.22" letterSpacing="5">TEYVAT · GENSHIN IMPACT</text>
-      </svg>
-
-      {/* Scene 2: Hollow Zero / New Eridu */}
-      <svg className={`bg-scene${bgScene===2?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <rect width="1440" height="900" fill="#030a06"/>
-        {Array.from({length:14}).map((_,i)=>(
-          <g key={i} transform={`translate(${(i%5)*300+20},${Math.floor(i/5)*280+40})`}>
-            <rect width="260" height="220" fill="none" stroke="#00ff8828" strokeWidth="0.5"/>
-            {[40,80,120,160].map(y=><line key={y} x1="0" y1={y} x2="260" y2={y} stroke="#00ff8815" strokeWidth="0.4"/>)}
-            {[65,130,195].map(x=><line key={x} x1={x} y1="0" x2={x} y2="220" stroke="#00ff8815" strokeWidth="0.4"/>)}
-            {i%4===0&&<rect x="16" y="16" width="44" height="44" fill="#00ff8808" stroke="#00ff8850" strokeWidth="0.5"/>}
-            {i%4===1&&<circle cx="130" cy="110" r="34" fill="none" stroke="#ff3b8028" strokeWidth="0.5"/>}
-            {i%4===2&&<polygon points="130,30 160,90 100,90" fill="none" stroke="#00ff8835" strokeWidth="0.5"/>}
+          <g opacity="0.12">
+            {Array.from({length:22}).map((_,i)=>(
+              <line key={i} x1={i*80-20} y1="580" x2={i*80+20} y2="660" stroke="#C8A96E" strokeWidth="0.5"/>
+            ))}
+            <line x1="0" y1="580" x2="1440" y2="580" stroke="#C8A96E" strokeWidth="0.4"/>
+            <line x1="0" y1="660" x2="1440" y2="660" stroke="#C8A96E" strokeWidth="0.4"/>
           </g>
-        ))}
-        <polygon points="720,330 745,400 820,400 762,443 784,513 720,470 656,513 678,443 620,400 695,400" fill="none" stroke="#ff3b80" strokeWidth="1.2" opacity="0.45"/>
-        <circle cx="720" cy="420" r="70" fill="none" stroke="#ff3b80" strokeWidth="0.4" opacity="0.2"/>
-        <circle cx="720" cy="420" r="110" fill="none" stroke="#00ff88" strokeWidth="0.3" opacity="0.12"/>
-        {[0,60,120,180,240,300].map((a,i)=>(
-          <line key={i} x1="720" y1="420" x2={720+Math.cos(a*Math.PI/180)*150} y2={420+Math.sin(a*Math.PI/180)*150} stroke="#00ff88" strokeWidth="0.4" opacity="0.12"/>
-        ))}
-        <radialGradient id="zzz-vign" cx="50%" cy="50%" r="65%">
-          <stop offset="0%" stopColor="transparent"/>
-          <stop offset="100%" stopColor="#030a06"/>
-        </radialGradient>
-        <rect width="1440" height="900" fill="url(#zzz-vign)" opacity="0.6"/>
-        <text x="720" y="820" textAnchor="middle" fontFamily="monospace" fontSize="11" fill="#00ff88" opacity="0.2" letterSpacing="5">NEW ERIDU · ZENLESS ZONE ZERO</text>
-      </svg>
+          <radialGradient id="ae-vign" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stopColor="transparent"/>
+            <stop offset="100%" stopColor="#030614"/>
+          </radialGradient>
+          <rect width="1440" height="900" fill="url(#ae-vign)" opacity="0.55"/>
+          <text x="720" y="820" textAnchor="middle" fontFamily="serif" fontSize="11" fill="#C8A96E" opacity="0.22" letterSpacing="5">ASTRAL EXPRESS · INTERSTELLAR JOURNEY</text>
+        </svg>
 
-      {/* Scene 3: HI3 Commandant Room */}
-      <svg className={`bg-scene${bgScene===3?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <rect width="1440" height="900" fill="#060412"/>
-        <rect x="100" y="80" width="1240" height="740" fill="none" stroke="rgba(168,85,247,.14)" strokeWidth="1"/>
-        <rect x="180" y="140" width="1080" height="620" fill="none" stroke="rgba(168,85,247,.07)" strokeWidth="0.5"/>
-        <line x1="100" y1="450" x2="1340" y2="450" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
-        <line x1="720" y1="80" x2="720" y2="820" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
-        {Array.from({length:6}).map((_,i)=>(
-          <rect key={i} x={240+i*165} y="180" width="130" height="90" rx="2" fill="rgba(168,85,247,.04)" stroke="rgba(168,85,247,.18)" strokeWidth="0.5"/>
-        ))}
-        {Array.from({length:6}).map((_,i)=>(
-          <rect key={i} x={240+i*165} y="630" width="130" height="90" rx="2" fill="rgba(168,85,247,.04)" stroke="rgba(168,85,247,.18)" strokeWidth="0.5"/>
-        ))}
-        <rect x="540" y="390" width="360" height="180" rx="4" fill="rgba(168,85,247,.06)" stroke="rgba(168,85,247,.35)" strokeWidth="1"/>
-        <rect x="560" y="410" width="320" height="140" rx="2" fill="none" stroke="rgba(168,85,247,.15)" strokeWidth="0.5"/>
-        <line x1="560" y1="455" x2="880" y2="455" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
-        <line x1="560" y1="500" x2="880" y2="500" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
-        <line x1="720" y1="410" x2="720" y2="550" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
-        <circle cx="720" cy="480" r="5" fill="#A855F7" opacity="0.6"/>
-        <circle cx="720" cy="480" r="18" fill="none" stroke="#A855F7" strokeWidth="0.6" opacity="0.3"/>
-        <circle cx="720" cy="480" r="36" fill="none" stroke="#A855F7" strokeWidth="0.4" opacity="0.18"/>
-        {[0,60,120,180,240,300].map((a,i)=>(
-          <line key={i} x1="720" y1="480" x2={720+Math.cos(a*Math.PI/180)*140} y2={480+Math.sin(a*Math.PI/180)*140} stroke="rgba(168,85,247,.13)" strokeWidth="0.5"/>
-        ))}
-        <radialGradient id="hi3-vign" cx="50%" cy="50%" r="70%">
-          <stop offset="0%" stopColor="transparent"/>
-          <stop offset="100%" stopColor="#060412"/>
-        </radialGradient>
-        <rect width="1440" height="900" fill="url(#hi3-vign)" opacity="0.55"/>
-        <text x="720" y="820" textAnchor="middle" fontFamily="serif" fontSize="11" fill="#A855F7" opacity="0.22" letterSpacing="5">CAPTAIN'S BRIDGE · HONKAI IMPACT 3RD</text>
-      </svg>
+        {/* Scene 1: Genshin / Teyvat */}
+        <svg className={`bg-scene${bgScene===1?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <rect width="1440" height="900" fill="#04091a"/>
+          {Array.from({length:130}).map((_,i)=>(
+            <circle key={i} cx={(i*173)%1440} cy={(i*103)%900} r={i%11===0?2.5:i%5===0?1.8:0.9} fill={i%7===0?'#A8D8F0':i%4===0?'#F5D78A':'#ffffff'} opacity={0.12+((i*0.045)%0.65)}/>
+          ))}
+          <polygon points="720,110 738,165 796,165 749,198 767,253 720,220 673,253 691,198 644,165 702,165" fill="none" stroke="#F5D78A" strokeWidth="1.8" opacity="0.38"/>
+          <polygon points="720,122 734,162 774,162 743,183 754,223 720,200 686,223 697,183 666,162 706,162" fill="#F5D78A" opacity="0.04"/>
+          {[0,45,90,135,180,225,270,315].map((angle,i)=>(
+            <g key={i} transform={`rotate(${angle},720,180)`}>
+              <line x1="720" y1="85" x2="720" y2="105" stroke="#F5D78A" strokeWidth="1.2" opacity="0.3"/>
+            </g>
+          ))}
+          <circle cx="720" cy="180" r="60" fill="none" stroke="#F5D78A" strokeWidth="0.4" opacity="0.15"/>
+          <circle cx="720" cy="180" r="90" fill="none" stroke="#A8D8F0" strokeWidth="0.4" opacity="0.1"/>
+          <ellipse cx="720" cy="700" rx="520" ry="90" fill="none" stroke="#3A6A4A" strokeWidth="0.6" opacity="0.25"/>
+          <ellipse cx="720" cy="720" rx="360" ry="60" fill="#0a1f10" opacity="0.35"/>
+          <ellipse cx="360" cy="650" rx="120" ry="40" fill="none" stroke="#A8D8F0" strokeWidth="0.4" opacity="0.15"/>
+          <ellipse cx="1080" cy="620" rx="100" ry="35" fill="none" stroke="#A8D8F0" strokeWidth="0.4" opacity="0.15"/>
+          <radialGradient id="gi-vign" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stopColor="transparent"/>
+            <stop offset="100%" stopColor="#04091a"/>
+          </radialGradient>
+          <rect width="1440" height="900" fill="url(#gi-vign)" opacity="0.5"/>
+          <text x="720" y="820" textAnchor="middle" fontFamily="serif" fontSize="11" fill="#F5D78A" opacity="0.22" letterSpacing="5">TEYVAT · GENSHIN IMPACT</text>
+        </svg>
+
+        {/* Scene 2: Hollow Zero / New Eridu */}
+        <svg className={`bg-scene${bgScene===2?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <rect width="1440" height="900" fill="#030a06"/>
+          {Array.from({length:14}).map((_,i)=>(
+            <g key={i} transform={`translate(${(i%5)*300+20},${Math.floor(i/5)*280+40})`}>
+              <rect width="260" height="220" fill="none" stroke="#00ff8828" strokeWidth="0.5"/>
+              {[40,80,120,160].map(y=><line key={y} x1="0" y1={y} x2="260" y2={y} stroke="#00ff8815" strokeWidth="0.4"/>)}
+              {[65,130,195].map(x=><line key={x} x1={x} y1="0" x2={x} y2="220" stroke="#00ff8815" strokeWidth="0.4"/>)}
+              {i%4===0&&<rect x="16" y="16" width="44" height="44" fill="#00ff8808" stroke="#00ff8850" strokeWidth="0.5"/>}
+              {i%4===1&&<circle cx="130" cy="110" r="34" fill="none" stroke="#ff3b8028" strokeWidth="0.5"/>}
+              {i%4===2&&<polygon points="130,30 160,90 100,90" fill="none" stroke="#00ff8835" strokeWidth="0.5"/>}
+            </g>
+          ))}
+          <polygon points="720,330 745,400 820,400 762,443 784,513 720,470 656,513 678,443 620,400 695,400" fill="none" stroke="#ff3b80" strokeWidth="1.2" opacity="0.45"/>
+          <circle cx="720" cy="420" r="70" fill="none" stroke="#ff3b80" strokeWidth="0.4" opacity="0.2"/>
+          <circle cx="720" cy="420" r="110" fill="none" stroke="#00ff88" strokeWidth="0.3" opacity="0.12"/>
+          {[0,60,120,180,240,300].map((a,i)=>(
+            <line key={i} x1="720" y1="420" x2={720+Math.cos(a*Math.PI/180)*150} y2={420+Math.sin(a*Math.PI/180)*150} stroke="#00ff88" strokeWidth="0.4" opacity="0.12"/>
+          ))}
+          <radialGradient id="zzz-vign" cx="50%" cy="50%" r="65%">
+            <stop offset="0%" stopColor="transparent"/>
+            <stop offset="100%" stopColor="#030a06"/>
+          </radialGradient>
+          <rect width="1440" height="900" fill="url(#zzz-vign)" opacity="0.6"/>
+          <text x="720" y="820" textAnchor="middle" fontFamily="monospace" fontSize="11" fill="#00ff88" opacity="0.2" letterSpacing="5">NEW ERIDU · ZENLESS ZONE ZERO</text>
+        </svg>
+
+        {/* Scene 3: HI3 Commandant Room */}
+        <svg className={`bg-scene${bgScene===3?' active':''}`} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <rect width="1440" height="900" fill="#060412"/>
+          <rect x="100" y="80" width="1240" height="740" fill="none" stroke="rgba(168,85,247,.14)" strokeWidth="1"/>
+          <rect x="180" y="140" width="1080" height="620" fill="none" stroke="rgba(168,85,247,.07)" strokeWidth="0.5"/>
+          <line x1="100" y1="450" x2="1340" y2="450" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
+          <line x1="720" y1="80" x2="720" y2="820" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
+          {Array.from({length:6}).map((_,i)=>(
+            <rect key={i} x={240+i*165} y="180" width="130" height="90" rx="2" fill="rgba(168,85,247,.04)" stroke="rgba(168,85,247,.18)" strokeWidth="0.5"/>
+          ))}
+          {Array.from({length:6}).map((_,i)=>(
+            <rect key={i} x={240+i*165} y="630" width="130" height="90" rx="2" fill="rgba(168,85,247,.04)" stroke="rgba(168,85,247,.18)" strokeWidth="0.5"/>
+          ))}
+          <rect x="540" y="390" width="360" height="180" rx="4" fill="rgba(168,85,247,.06)" stroke="rgba(168,85,247,.35)" strokeWidth="1"/>
+          <rect x="560" y="410" width="320" height="140" rx="2" fill="none" stroke="rgba(168,85,247,.15)" strokeWidth="0.5"/>
+          <line x1="560" y1="455" x2="880" y2="455" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
+          <line x1="560" y1="500" x2="880" y2="500" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
+          <line x1="720" y1="410" x2="720" y2="550" stroke="rgba(168,85,247,.1)" strokeWidth="0.5"/>
+          <circle cx="720" cy="480" r="5" fill="#A855F7" opacity="0.6"/>
+          <circle cx="720" cy="480" r="18" fill="none" stroke="#A855F7" strokeWidth="0.6" opacity="0.3"/>
+          <circle cx="720" cy="480" r="36" fill="none" stroke="#A855F7" strokeWidth="0.4" opacity="0.18"/>
+          {[0,60,120,180,240,300].map((a,i)=>(
+            <line key={i} x1="720" y1="480" x2={720+Math.cos(a*Math.PI/180)*140} y2={480+Math.sin(a*Math.PI/180)*140} stroke="rgba(168,85,247,.13)" strokeWidth="0.5"/>
+          ))}
+          <radialGradient id="hi3-vign" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stopColor="transparent"/>
+            <stop offset="100%" stopColor="#060412"/>
+          </radialGradient>
+          <rect width="1440" height="900" fill="url(#hi3-vign)" opacity="0.55"/>
+          <text x="720" y="820" textAnchor="middle" fontFamily="serif" fontSize="11" fill="#A855F7" opacity="0.22" letterSpacing="5">CAPTAIN'S BRIDGE · HONKAI IMPACT 3RD</text>
+        </svg>
+      </div>
+
 
       <div style={{position:'relative',zIndex:1}}>
 

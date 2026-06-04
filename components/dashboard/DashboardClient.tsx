@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Topbar } from '@/components/dashboard/Topbar';
 import { StatCards } from '@/components/dashboard/StatCards';
@@ -8,6 +8,7 @@ import { GamePills } from '@/components/dashboard/GamePills';
 import { ReportsSection } from '@/components/dashboard/ReportsSection';
 import { RightWidgets } from '@/components/dashboard/RightWidgets';
 import { reportsData, GameFilter, TypeFilter, gameAccentMap } from '@/utils';
+import { LoadingAnimation } from '@/components/ui';
 
 // Tipe yang sesuai dengan data di constants.ts
 interface ReportItem {
@@ -23,8 +24,18 @@ interface ReportItem {
 }
 
 export default function DashboardClient() {
+  const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<TypeFilter>('all');
   const [activeGame, setActiveGame] = useState<GameFilter>('all');
+
+  useEffect(() => {
+    // Simulasi fetch data dashboard
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Hapus tipe parameter, biarkan TypeScript infer secara otomatis
   const filteredReports = reportsData.filter((r) => {
@@ -39,6 +50,10 @@ export default function DashboardClient() {
   };
 
   const accentColor = gameAccentMap[activeGame];
+
+  if (loading) {
+    return <LoadingAnimation message="LOADING DASHBOARD..." />;
+  }
 
   return (
     <div
