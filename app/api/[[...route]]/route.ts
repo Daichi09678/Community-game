@@ -43,9 +43,9 @@ export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// ========== Email Configuration ==========
+// ========== Email Configuration (SMTP Gmail) ==========
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: Number(process.env.SMTP_PORT) || 587,
   secure: false,
   auth: {
@@ -56,13 +56,13 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify((error, success) => {
   if (error) console.error('❌ SMTP Error:', error);
-  else console.log('✅ SMTP ready');
+  else console.log('✅ SMTP ready to send emails');
 });
 
-function getVerificationEmailHtml(otpCode: string, name?: string): string {
+function getOTPEmailHtml(otpCode: string, name?: string): string {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Verifikasi Email</title>
+<head><meta charset="utf-8"><title>Verifikasi Login - Triablazer</title>
 <style>
   body { font-family: 'Rajdhani', sans-serif; background: #050810; color: #E5DCC8; margin: 0; padding: 20px; }
   .container { max-width: 500px; margin: 0 auto; background: #0B1121; border: 0.5px solid rgba(200,169,110,0.18); padding: 2rem; border-radius: 12px; }
@@ -74,10 +74,10 @@ function getVerificationEmailHtml(otpCode: string, name?: string): string {
 <div class="container">
   <h2 style="color:#C8A96E;">✦ Triablazer ✦</h2>
   <p>Halo${name ? `, ${name}` : ' Traveler'}!</p>
-  <p>Gunakan kode berikut untuk memverifikasi email Anda:</p>
+  <p>Gunakan kode verifikasi berikut untuk menyelesaikan login Anda:</p>
   <div class="code">${otpCode}</div>
   <p>Kode ini berlaku selama <strong>10 menit</strong>.</p>
-  <p>Jika Anda tidak melakukan permintaan ini, abaikan email ini.</p>
+  <p>Jika Anda tidak mencoba login, abaikan email ini.</p>
   <div class="footer">© 2025 Triablazer · All rights reserved</div>
 </div>
 </body>
@@ -85,11 +85,11 @@ function getVerificationEmailHtml(otpCode: string, name?: string): string {
 }
 
 async function sendOTPEmail(email: string, code: string, name?: string) {
-  const html = getVerificationEmailHtml(code, name);
+  const html = getOTPEmailHtml(code, name);
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Kode Verifikasi - Triablazer',
+    subject: 'Kode Verifikasi Login - Triablazer',
     html,
   });
 }
@@ -98,27 +98,24 @@ async function sendOTPEmail(email: string, code: string, name?: string) {
 const app = new Elysia({ prefix: '/api' })
   .use(cors({ origin: true, credentials: true }))
   
-  // ========== SEND OTP ==========
+  // ========== SEND OTP (Forget Password) ==========
   .post('/otp/send', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
       
       console.log('📧 SEND OTP - Menerima email:', email);
 
-      // Validasi email
       if (!email || !email.includes('@')) {
         set.status = 400;
         return { error: 'Email tidak valid' };
       }
 
-      // Cek apakah email terdaftar
       const existing = await db.select().from(users).where(eq(users.email, email));
       if (existing.length === 0) {
         set.status = 404;
         return { error: 'Email tidak terdaftar' };
       }
 
-      // Cek apakah email sudah terverifikasi
       if (!existing[0].isVerified) {
         set.status = 400;
         return { error: 'Email belum diverifikasi. Silakan registrasi terlebih dahulu.' };
@@ -128,21 +125,10 @@ const app = new Elysia({ prefix: '/api' })
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
       const id = randomUUID();
 
-      // Hapus OTP lama
       await db.delete(otpCodes).where(eq(otpCodes.email, email));
-      
-      // Simpan OTP baru
-      await db.insert(otpCodes).values({ 
-        id, 
-        email, 
-        code, 
-        expiresAt, 
-        isUsed: false 
-      });
+      await db.insert(otpCodes).values({ id, email, code, expiresAt, isUsed: false });
       
       console.log('✅ OTP tersimpan di database:', code);
-
-      // Kirim email
       await sendOTPEmail(email, code, existing[0].username);
       console.log('✅ Email OTP terkirim ke:', email);
 
@@ -150,16 +136,13 @@ const app = new Elysia({ prefix: '/api' })
         message: 'OTP sent', 
         devOTP: process.env.NODE_ENV === 'development' ? code : undefined 
       };
-      
     } catch (error) {
       console.error('❌ ERROR di /otp/send:', error);
       set.status = 500;
       return { error: error instanceof Error ? error.message : 'Internal server error' };
     }
   }, {
-    body: t.Object({ 
-      email: t.String({ format: 'email' }) 
-    })
+    body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
   // ========== RESEND OTP ==========
@@ -198,7 +181,7 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
-  // ========== VERIFY OTP ==========
+  // ========== VERIFY OTP (Forget Password) ==========
   .post('/otp/verify', async ({ body, set }) => {
     try {
       const { email, code } = body as { email: string; code: string };
@@ -240,6 +223,170 @@ const app = new Elysia({ prefix: '/api' })
       email: t.String({ format: 'email' }),
       code: t.String({ minLength: 6, maxLength: 6 })
     })
+  })
+  
+  // ========== SIGN IN (Step 1 - Check credentials & send OTP) ==========
+  .post('/auth/signin', async ({ body, set }) => {
+    try {
+      const { email, password } = body as { email: string; password: string };
+
+      console.log('📝 Sign in attempt:', email);
+
+      const user = await db.select().from(users).where(eq(users.email, email));
+      if (user.length === 0) {
+        set.status = 401;
+        return { error: 'Email atau password salah' };
+      }
+
+      const validPassword = await verifyPassword(password, user[0].password);
+      if (!validPassword) {
+        set.status = 401;
+        return { error: 'Email atau password salah' };
+      }
+
+      console.log('✅ Password valid, sending OTP to:', email);
+
+      // Generate and send OTP
+      const code = generateOTP();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      const id = randomUUID();
+
+      await db.delete(otpCodes).where(eq(otpCodes.email, email));
+      await db.insert(otpCodes).values({ id, email, code, expiresAt, isUsed: false });
+      
+      await sendOTPEmail(email, code, user[0].username);
+      
+      console.log('✅ OTP sent to:', email);
+
+      return {
+        success: true,
+        message: 'OTP sent to your email',
+        requiresOTP: true,
+        email: email,
+        devOTP: process.env.NODE_ENV === 'development' ? code : undefined
+      };
+    } catch (error) {
+      console.error('❌ Signin error:', error);
+      set.status = 500;
+      return { error: 'Internal server error' };
+    }
+  }, {
+    body: t.Object({
+      email: t.String({ format: 'email' }),
+      password: t.String()
+    })
+  })
+
+  // ========== VERIFY LOGIN OTP (Step 2 - Verify OTP & create session) ==========
+  .post('/auth/verify-login-otp', async ({ body, set, cookie: { token } }) => {
+    try {
+      const { email, code } = body as { email: string; code: string };
+      
+      console.log('🔐 Verifying login OTP for:', email);
+
+      const valid = await db.select()
+        .from(otpCodes)
+        .where(
+          and(
+            eq(otpCodes.email, email),
+            eq(otpCodes.code, code),
+            eq(otpCodes.isUsed, false)
+          )
+        );
+
+      if (valid.length === 0) {
+        set.status = 400;
+        return { error: 'Kode OTP tidak valid' };
+      }
+
+      const otp = valid[0];
+      if (new Date() > new Date(otp.expiresAt)) {
+        set.status = 400;
+        return { error: 'Kode OTP sudah kadaluarsa' };
+      }
+
+      // Mark OTP as used
+      await db.update(otpCodes).set({ isUsed: true }).where(eq(otpCodes.id, otp.id));
+      
+      // Get user data
+      const user = await db.select().from(users).where(eq(users.email, email));
+      if (user.length === 0) {
+        set.status = 404;
+        return { error: 'User tidak ditemukan' };
+      }
+
+      // Generate session token
+      const jwtToken = await generateToken(user[0].id, user[0].email);
+      token.set({
+        value: jwtToken,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60,
+        path: '/',
+      });
+
+      console.log('✅ Login OTP verified successfully for:', email);
+
+      return {
+        success: true,
+        verified: true,
+        message: 'Verifikasi berhasil',
+        user: {
+          id: user[0].id,
+          username: user[0].username,
+          email: user[0].email,
+          rank: user[0].rank,
+          level: user[0].level,
+        }
+      };
+    } catch (error) {
+      console.error('❌ Verify login OTP error:', error);
+      set.status = 500;
+      return { error: 'Verification failed' };
+    }
+  }, {
+    body: t.Object({
+      email: t.String({ format: 'email' }),
+      code: t.String({ minLength: 6, maxLength: 6 })
+    })
+  })
+
+  // ========== RESEND LOGIN OTP ==========
+  .post('/auth/resend-login-otp', async ({ body, set }) => {
+    try {
+      const { email } = body as { email: string };
+      
+      console.log('📧 Resending login OTP to:', email);
+
+      const user = await db.select().from(users).where(eq(users.email, email));
+      if (user.length === 0) {
+        set.status = 404;
+        return { error: 'Email tidak terdaftar' };
+      }
+
+      const code = generateOTP();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      const id = randomUUID();
+
+      await db.delete(otpCodes).where(eq(otpCodes.email, email));
+      await db.insert(otpCodes).values({ id, email, code, expiresAt, isUsed: false });
+
+      await sendOTPEmail(email, code, user[0].username);
+      console.log('✅ Login OTP resent to:', email);
+
+      return {
+        success: true,
+        message: 'OTP resent successfully',
+        devOTP: process.env.NODE_ENV === 'development' ? code : undefined
+      };
+    } catch (error) {
+      console.error('❌ Resend login OTP error:', error);
+      set.status = 500;
+      return { error: 'Failed to resend OTP' };
+    }
+  }, {
+    body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
   // ========== SIGN UP ==========
@@ -317,57 +464,6 @@ const app = new Elysia({ prefix: '/api' })
       username: t.String({ minLength: 3 }),
       email: t.String({ format: 'email' }),
       password: t.String({ minLength: 8 })
-    })
-  })
-  
-  // ========== SIGN IN ==========
-  .post('/auth/signin', async ({ body, set, cookie: { token } }) => {
-    try {
-      const { email, password } = body as { email: string; password: string };
-
-      const user = await db.select().from(users).where(eq(users.email, email));
-      if (user.length === 0) {
-        set.status = 401;
-        return { error: 'Email atau password salah' };
-      }
-
-      const validPassword = await verifyPassword(password, user[0].password);
-      if (!validPassword) {
-        set.status = 401;
-        return { error: 'Email atau password salah' };
-      }
-
-      const jwtToken = await generateToken(user[0].id, user[0].email);
-      token.set({
-        value: jwtToken,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      });
-
-      console.log('✅ User signed in:', user[0].email);
-
-      return {
-        message: 'Login berhasil',
-        user: {
-          id: user[0].id,
-          username: user[0].username,
-          email: user[0].email,
-          rank: user[0].rank,
-          level: user[0].level,
-        }
-      };
-    } catch (error) {
-      console.error('❌ Signin error:', error);
-      set.status = 500;
-      return { error: 'Internal server error' };
-    }
-  }, {
-    body: t.Object({
-      email: t.String({ format: 'email' }),
-      password: t.String()
     })
   })
   
@@ -453,7 +549,6 @@ const app = new Elysia({ prefix: '/api' })
       
       console.log('🔄 FORGET RESET - Email:', email);
       
-      // 1. Verifikasi OTP
       const valid = await db.select()
         .from(otpCodes)
         .where(
@@ -475,34 +570,28 @@ const app = new Elysia({ prefix: '/api' })
         return { error: 'Kode OTP sudah kadaluarsa' };
       }
 
-      // 2. Cek user exists
       const user = await db.select().from(users).where(eq(users.email, email));
       if (user.length === 0) {
         set.status = 404;
         return { error: 'User tidak ditemukan' };
       }
 
-      // 3. Validasi password
       if (newPassword.length < 8) {
         set.status = 400;
         return { error: 'Password minimal 8 karakter' };
       }
 
-      // 4. Update password
       const hashedPassword = await hashPassword(newPassword);
       await db.update(users)
         .set({ password: hashedPassword })
         .where(eq(users.id, user[0].id));
 
-      // 5. Mark OTP as used
       await db.update(otpCodes)
         .set({ isUsed: true })
         .where(eq(otpCodes.id, otp.id));
 
-      // 6. Delete all used OTPs for this email
       await db.delete(otpCodes).where(eq(otpCodes.email, email));
 
-      // 7. Generate new JWT token for auto login
       const jwtToken = await generateToken(user[0].id, user[0].email);
       token.set({
         value: jwtToken,
