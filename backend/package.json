@@ -1,0 +1,15 @@
+{
+  "name": "triablazer-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.1.0",
+    "@elysiajs/swagger": "^1.1.0",
+    "elysia": "^1.0.25",
+    "mysql2": "^3.22.4"
+  }
+}

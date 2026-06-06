@@ -32,6 +32,7 @@ export default function SignUp() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
+  const [verificationId, setVerificationId] = useState<string | null>(null); // Untuk tracking session verifikasi
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Countdown timer for resend
@@ -41,47 +42,40 @@ export default function SignUp() {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
-  // ---------- API calls ----------
+  // ---------- API calls (FIXED ENDPOINTS) ----------
   const api = {
     sendOTP: async (email: string) => {
-      const res = await fetch('/api/otp/send', {
+      console.log('📤 Sending OTP to:', email);
+      const res = await fetch('/api/otp/send-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      return res.json();
+      const data = await res.json();
+      console.log('📥 Send OTP response:', data);
+      return data;
     },
     resendOTP: async (email: string) => {
-      const res = await fetch('/api/otp/resend', {
+      console.log('📤 Resending OTP to:', email);
+      const res = await fetch('/api/otp/resend-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      return res.json();
+      const data = await res.json();
+      console.log('📥 Resend OTP response:', data);
+      return data;
     },
     verifyOTP: async (email: string, code: string) => {
-      const res = await fetch('/api/otp/verify', {
+      console.log('🔐 Verifying OTP for:', email, 'Code:', code);
+      const res = await fetch('/api/otp/verify-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code }),
       });
-      return res.json();
-    },
-    signUp: async (username: string, email: string, password: string) => {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      });
-      return res.json();
-    },
-    signIn: async (email: string, password: string) => {
-      const res = await fetch('/api/auth/signin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      return res.json();
+      const data = await res.json();
+      console.log('📥 Verify OTP response:', data);
+      return data;
     },
   };
 
@@ -100,15 +94,34 @@ export default function SignUp() {
   };
 
   const pwStrength = passwordStrength();
-  const passwordsMatch   = confirm.length > 0 && password === confirm;
+  const passwordsMatch    = confirm.length > 0 && password === confirm;
   const passwordsMismatch = confirm.length > 0 && password !== confirm;
 
   // ---------- Handlers ----------
   const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
     if (step === 1) {
+      // Validasi username dan email
+      if (username.length < 3) {
+        alert('Username minimal 3 karakter');
+        return;
+      }
+      if (!email.includes('@')) {
+        alert('Email tidak valid');
+        return;
+      }
       setStep(2);
     } else if (step === 2) {
+      // Validasi password
+      if (password.length < 8) {
+        alert('Password minimal 8 karakter');
+        return;
+      }
+      if (password !== confirm) {
+        alert('Password tidak cocok');
+        return;
+      }
+      
       setLoading(true);
       try {
         const result = await api.sendOTP(email);
@@ -116,7 +129,14 @@ export default function SignUp() {
           alert(result.error);
           return;
         }
-        if (result.devOTP) console.log('Dev OTP:', result.devOTP);
+        if (result.devOTP) {
+          console.log('⚠️ Dev OTP:', result.devOTP);
+          // Optional: auto-fill OTP for development
+          if (process.env.NODE_ENV === 'development') {
+            const devOtpDigits = result.devOTP.split('');
+            setOtp(devOtpDigits.concat(Array(OTP_LENGTH - devOtpDigits.length).fill('')));
+          }
+        }
         setOtp(Array(OTP_LENGTH).fill(''));
         setOtpError('');
         setOtpVerified(false);
@@ -124,7 +144,8 @@ export default function SignUp() {
         setStep(3);
         setTimeout(() => otpRefs.current[0]?.focus(), 100);
       } catch (err) {
-        alert('Failed to send OTP');
+        console.error('Send OTP error:', err);
+        alert('Gagal mengirim kode OTP. Periksa koneksi internet Anda.');
       } finally {
         setLoading(false);
       }
@@ -175,7 +196,7 @@ export default function SignUp() {
     e.preventDefault();
     const code = otp.join('');
     if (code.length < OTP_LENGTH) {
-      setOtpError('Please enter all 6 digits.');
+      setOtpError('Masukkan 6 digit kode lengkap.');
       return;
     }
     setLoading(true);
@@ -183,18 +204,21 @@ export default function SignUp() {
       const result = await api.verifyOTP(email, code);
       if (result.error) {
         setOtpError(result.error);
-      } else {
+      } else if (result.success || result.verified) {
         setOtpVerified(true);
-        setTimeout(() => setStep(4), 600);
+        // Tunggu sebentar sebelum pindah ke step berikutnya
+        setTimeout(() => setStep(4), 800);
+      } else {
+        setOtpError('Verifikasi gagal. Silakan coba lagi.');
       }
     } catch (err) {
-      setOtpError('Verification failed');
+      console.error('Verify OTP error:', err);
+      setOtpError('Gagal memverifikasi kode. Periksa koneksi internet.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔥 PERBAIKAN: handleResend menggunakan api.resendOTP
   const handleResend = async () => {
     if (resendCooldown > 0) return;
     setResendLoading(true);
@@ -203,78 +227,72 @@ export default function SignUp() {
       if (result.error) {
         alert(result.error);
       } else {
-        if (result.devOTP) console.log('New OTP:', result.devOTP);
+        if (result.devOTP) {
+          console.log('⚠️ New Dev OTP:', result.devOTP);
+          if (process.env.NODE_ENV === 'development') {
+            const devOtpDigits = result.devOTP.split('');
+            setOtp(devOtpDigits.concat(Array(OTP_LENGTH - devOtpDigits.length).fill('')));
+          }
+        }
         setOtp(Array(OTP_LENGTH).fill(''));
         setOtpError('');
         setResendCooldown(60);
         otpRefs.current[0]?.focus();
+        alert('Kode OTP baru telah dikirim ke email Anda');
       }
     } catch (err) {
-      alert('Failed to resend');
+      console.error('Resend OTP error:', err);
+      alert('Gagal mengirim ulang kode OTP');
     } finally {
       setResendLoading(false);
     }
   };
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!agreed) return;
-  setLoading(true);
-  try {
-    // 1. Sign Up
-    const signUpResponse = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password }),
-    });
-
-    const signUpText = await signUpResponse.text();
-    console.log('Signup raw response:', signUpText);
-
-    if (!signUpText || signUpText.trim() === '') {
-      throw new Error('Server returned empty response on signup');
-    }
-
-    const signUpResult = JSON.parse(signUpText);
-
-    if (signUpResult.error) {
-      alert(signUpResult.error);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agreed) {
+      alert('Anda harus menyetujui Terms of Service');
       return;
     }
+    
+    setLoading(true);
+    try {
+      const otpCode = otp.join('');
+      
+      // Pastikan OTP sudah diverifikasi
+      if (!otpVerified) {
+        alert('Silakan verifikasi OTP terlebih dahulu');
+        setLoading(false);
+        return;
+      }
 
-    console.log('Signup success:', signUpResult);
+      console.log('📝 Submitting signup with:', { username, email, password: '***', otpCode });
 
-    // 2. Sign In (auto-login)
-    const signInResponse = await fetch('/api/auth/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password }),
-    });
+      const signUpResponse = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password, otpCode }),
+      });
 
-    const signInText = await signInResponse.text();
-    console.log('Signin raw response:', signInText);
+      const signUpResult = await signUpResponse.json();
 
-    if (!signInText || signInText.trim() === '') {
-      throw new Error('Server returned empty response on signin');
-    }
+      if (!signUpResponse.ok || signUpResult.error) {
+        alert(signUpResult.error || 'Registrasi gagal');
+        return;
+      }
 
-    const signInResult = JSON.parse(signInText);
+      console.log('✅ Signup success:', signUpResult);
 
-    if (signInResult.error) {
-      alert('Account created but auto-login failed. Please sign in manually.');
-      window.location.href = '/Sign-in';
-    } else {
       // Redirect ke dashboard
       window.location.href = '/UserHoyo/dashboard';
+
+    } catch (err) {
+      console.error('Sign up error detail:', err);
+      alert('Registrasi gagal: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('Sign up error detail:', err);
-    alert('Sign up failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const borderColor = (field: string) =>
     focusField === field ? 'rgba(200,169,110,.55)' : 'rgba(200,169,110,.15)';
@@ -283,7 +301,6 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   const steps = ['Identity', 'Cipher', 'Verify', 'Manifest'];
   const otpFilled = otp.every(d => d !== '');
-
 
   return (
     <>
@@ -420,7 +437,6 @@ const handleSubmit = async (e: React.FormEvent) => {
         .step-node.pending{background:rgba(200,169,110,.04);border:.5px solid rgba(200,169,110,.15);color:#4A4540}
         .step-line{flex:1;height:.5px;transition:background .3s}
 
-        /* OTP input */
         .otp-input{
           width:44px;height:54px;text-align:center;
           background:rgba(200,169,110,.05);
@@ -582,7 +598,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   })}
                 </div>
 
-                {/* ── STEP 1 — Identity ── */}
+                {/* STEP 1 — Identity */}
                 {step === 1 && (
                   <form key="step1" className="slide-in" onSubmit={handleNext}>
                     <div style={{marginBottom:'1rem'}}>
@@ -645,7 +661,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   </form>
                 )}
 
-                {/* ── STEP 2 — Cipher / Password ── */}
+                {/* STEP 2 — Cipher / Password */}
                 {step === 2 && (
                   <form key="step2" className="slide-in" onSubmit={handleNext}>
                     <div style={{marginBottom:'1rem'}}>
@@ -708,19 +724,28 @@ const handleSubmit = async (e: React.FormEvent) => {
                       <button type="button" className="back-btn" onClick={()=>setStep(1)}>← Back</button>
                       <button type="submit" className="submit-btn" disabled={!passwordsMatch} style={{flex:1}}>
                         <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-                          Continue
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                          {loading ? (
+                            <>
+                              <svg className="spinner" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#060911" strokeWidth="2">
+                                <path d="M7 1a6 6 0 016 6" strokeLinecap="round"/>
+                              </svg>
+                              Sending OTP…
+                            </>
+                          ) : (
+                            <>
+                              Continue
+                              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                            </>
+                          )}
                         </span>
                       </button>
                     </div>
                   </form>
                 )}
 
-                {/* ── STEP 3 — Verify OTP ── */}
+                {/* STEP 3 — Verify OTP */}
                 {step === 3 && (
                   <form key="step3" className="slide-in" onSubmit={handleVerifyOtp}>
-
-                    {/* Info box */}
                     <div style={{padding:'1rem',background:'rgba(78,205,196,.04)',border:'.5px solid rgba(78,205,196,.18)',clipPath:'polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)',marginBottom:'1.5rem',display:'flex',gap:'.75rem',alignItems:'flex-start'}}>
                       <div style={{flexShrink:0,marginTop:2}}>
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#4ECDC4" strokeWidth="1.4">
@@ -737,13 +762,11 @@ const handleSubmit = async (e: React.FormEvent) => {
                       </div>
                     </div>
 
-                    {/* OTP inputs */}
                     <div style={{marginBottom:'1rem'}}>
                       <label style={{display:'block',fontSize:'.62rem',fontWeight:700,letterSpacing:'.16em',textTransform:'uppercase',color:'#6A6058',marginBottom:'.75rem'}}>
                         <span className="fc">Auth Code</span> &nbsp;/&nbsp; 6-Digit Cipher
                       </label>
 
-                      {/* Success overlay */}
                       {otpVerified ? (
                         <div className="scale-in" style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'.75rem',padding:'1rem',background:'rgba(78,205,196,.08)',border:'.5px solid rgba(78,205,196,.35)',clipPath:'polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)'}}>
                           <div style={{width:32,height:32,borderRadius:'50%',background:'rgba(78,205,196,.15)',border:'.5px solid rgba(78,205,196,.4)',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -783,7 +806,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                       )}
                     </div>
 
-                    {/* Resend */}
                     {!otpVerified && (
                       <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
                         <span style={{fontSize:'.72rem',color:'#4A4540',fontWeight:600}}>Didn't receive it? </span>
@@ -826,21 +848,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                         </button>
                       </div>
                     )}
-
-                    {/* Hint */}
-                    {!otpVerified && (
-                      <p style={{fontSize:'.62rem',color:'#3A3530',textAlign:'center',marginTop:'.85rem',letterSpacing:'.04em'}}>
-                        For demo: enter any 6 digits except <span style={{color:'#4A4540',fontFamily:'Space Mono,monospace'}}>000000</span>
-                      </p>
-                    )}
                   </form>
                 )}
 
-                {/* ── STEP 4 — Manifest / Confirm ── */}
+                {/* STEP 4 — Manifest / Confirm */}
                 {step === 4 && (
                   <form key="step4" className="slide-in" onSubmit={handleSubmit}>
-
-                    {/* Summary */}
                     <div style={{background:'rgba(200,169,110,.04)',border:'.5px solid rgba(200,169,110,.12)',clipPath:'polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)',padding:'1rem',marginBottom:'1.25rem'}}>
                       <div style={{fontSize:'.58rem',fontWeight:700,letterSpacing:'.16em',textTransform:'uppercase',color:'#4A4540',marginBottom:'.7rem'}}>Registration Manifest</div>
                       {[
@@ -859,7 +872,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                       ))}
                     </div>
 
-                    {/* Starting rank badge */}
                     <div style={{display:'flex',alignItems:'center',gap:'.75rem',padding:'.85rem',background:'rgba(168,85,247,.06)',border:'.5px solid rgba(168,85,247,.2)',clipPath:'polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)',marginBottom:'1.25rem'}}>
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A855F7" strokeWidth="1.4">
                         <polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/>
@@ -871,7 +883,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                       <div style={{marginLeft:'auto',clipPath:'polygon(4px 0,100% 0,calc(100% - 4px) 100%,0 100%)',padding:'.2rem .7rem',background:'rgba(168,85,247,.1)',border:'.5px solid rgba(168,85,247,.3)',color:'#A855F7',fontSize:'.6rem',fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase'}}>+50 XP</div>
                     </div>
 
-                    {/* Terms checkbox */}
                     <label style={{display:'flex',alignItems:'flex-start',gap:'.65rem',cursor:'pointer',marginBottom:'1.5rem'}} onClick={()=>setAgreed(!agreed)}>
                       <div className={`cb-box${agreed?' checked':''}`} style={{marginTop:2}}>
                         {agreed && (
@@ -915,7 +926,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                   </form>
                 )}
 
-                {/* Sign in link */}
                 <div style={{textAlign:'center',paddingTop:'1.25rem',marginTop:'1.25rem',borderTop:'.5px solid rgba(200,169,110,.08)'}}>
                   <span style={{fontSize:'.78rem',color:'#4A4540',fontWeight:600}}>Already a Trailblazer? </span>
                   <Link href="/Sign-in" style={{fontSize:'.78rem',color:'#C8A96E',fontWeight:700,textDecoration:'none',letterSpacing:'.04em',transition:'color .2s'}}
@@ -927,7 +937,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               </div>
             </div>
 
-            {/* Corner accents */}
             {(['tl','tr','bl','br'] as const).map(pos=>(
               <div key={pos} style={{
                 position:'absolute',width:14,height:14,
@@ -945,7 +954,6 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </main>
 
-        {/* FOOTER */}
         <footer style={{position:'relative',zIndex:1,borderTop:'.5px solid rgba(200,169,110,.1)',padding:'1.25rem 2.5rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'1rem'}}>
           <div className="fc" style={{fontSize:'.8rem',fontWeight:700,color:'#3A3530'}}>Trailblazer Hub</div>
           <div style={{display:'flex',gap:'1.5rem'}}>

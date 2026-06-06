@@ -1,4 +1,4 @@
-import { mysqlTable, text, timestamp, boolean, varchar, int } from 'drizzle-orm/mysql-core';
+import { mysqlTable, text, timestamp, boolean, varchar, int, float, mysqlEnum } from 'drizzle-orm/mysql-core';
 
 // Users table - Better Auth required fields
 export const users = mysqlTable('user', {
@@ -41,7 +41,7 @@ export const accounts = mysqlTable('account', {
   updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
 });
 
-// Verifications table for OTP
+// Verifications table - used by Better Auth for OTP/email verification
 export const verifications = mysqlTable('verification', {
   id: varchar('id', { length: 255 }).primaryKey(),
   identifier: varchar('identifier', { length: 255 }).notNull(),
@@ -51,15 +51,35 @@ export const verifications = mysqlTable('verification', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
-// User profiles table for additional data
+// User profiles table - extended game data
 export const userProfiles = mysqlTable('user_profile', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   username: varchar('username', { length: 100 }).unique(),
+  initials: varchar('initials', { length: 10 }),
+  rank: varchar('rank', { length: 100 }).default('Novice Omni-Voyager'),
   level: int('level').default(1),
   xp: int('xp').default(0),
   totalMissions: int('total_missions').default(0),
   totalReports: int('total_reports').default(0),
+  lastLogin: timestamp('last_login'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+// Reports table
+export const reports = mysqlTable('report', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  title: varchar('title', { length: 255 }).notNull(),
+  type: mysqlEnum('type', ['guide', 'event', 'puzzle', 'lore', 'build', 'other']).notNull().default('guide'),
+  game: mysqlEnum('game', ['hsr', 'gi', 'zzz', 'hi3']).notNull(),
+  status: mysqlEnum('status', ['draft', 'published', 'archived']).notNull().default('draft'),
+  authorId: varchar('author_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  authorInitials: varchar('author_initials', { length: 10 }),
+  rating: float('rating').default(0),
+  votes: int('votes').default(0),
+  version: varchar('version', { length: 20 }),
+  content: text('content'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
