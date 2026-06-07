@@ -133,7 +133,6 @@ function formatDateTime(date: Date | null | undefined | string): string {
 }
 
 // ========== ELYSIA APP ==========
-// 🔥 PERUBAHAN: Tambah prefix /api
 const app = new Elysia({ prefix: '/api' })
   .use(cors({ origin: true, credentials: true }))
   
@@ -146,7 +145,6 @@ const app = new Elysia({ prefix: '/api' })
   // OTP ENDPOINTS FOR REGISTRATION
   // =============================================
   
-  // SEND OTP FOR REGISTRATION
   .post('/otp/send-registration', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
@@ -158,7 +156,6 @@ const app = new Elysia({ prefix: '/api' })
         return { error: 'Email tidak valid' };
       }
 
-      // Cek apakah email sudah terdaftar
       const existing = await db.select().from(users).where(eq(users.email, email));
       if (existing.length > 0) {
         set.status = 400;
@@ -190,7 +187,6 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
-  // VERIFY OTP FOR REGISTRATION
   .post('/otp/verify-registration', async ({ body, set }) => {
     try {
       const { email, code } = body as { email: string; code: string };
@@ -234,7 +230,6 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
   
-  // RESEND OTP FOR REGISTRATION
   .post('/otp/resend-registration', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
@@ -275,7 +270,6 @@ const app = new Elysia({ prefix: '/api' })
   // OTP ENDPOINTS FOR FORGET PASSWORD
   // =============================================
   
-  // SEND OTP FOR FORGET PASSWORD
   .post('/otp/send', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
@@ -323,7 +317,6 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
-  // RESEND OTP FOR FORGET PASSWORD
   .post('/otp/resend', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
@@ -356,7 +349,6 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
-  // VERIFY OTP FOR FORGET PASSWORD
   .post('/otp/verify', async ({ body, set }) => {
     try {
       const { email, code } = body as { email: string; code: string };
@@ -404,7 +396,6 @@ const app = new Elysia({ prefix: '/api' })
   // AUTH ENDPOINTS
   // =============================================
   
-  // SIGN UP (REGISTRATION)
   .post('/auth/signup', async ({ body, set, cookie: { token } }) => {
     try {
       const { username, email, password, otpCode } = body as { 
@@ -416,7 +407,6 @@ const app = new Elysia({ prefix: '/api' })
 
       console.log('📝 Signup attempt:', { username, email });
 
-      // Validasi input
       if (username.length < 3) {
         set.status = 400;
         return { error: 'Username minimal 3 karakter' };
@@ -430,7 +420,6 @@ const app = new Elysia({ prefix: '/api' })
         return { error: 'Kode OTP diperlukan' };
       }
 
-      // Verifikasi OTP sudah diverifikasi (isUsed = true)
       const validOtp = await db.select()
         .from(otpCodes)
         .where(
@@ -445,21 +434,18 @@ const app = new Elysia({ prefix: '/api' })
         return { error: 'Email belum diverifikasi. Verifikasi dulu dengan kode OTP.' };
       }
 
-      // Cek email sudah terdaftar
       const existingEmail = await db.select().from(users).where(eq(users.email, email));
       if (existingEmail.length > 0) {
         set.status = 400;
         return { error: 'Email sudah terdaftar' };
       }
 
-      // Cek username sudah dipakai
       const existingUsername = await db.select().from(users).where(eq(users.username, username));
       if (existingUsername.length > 0) {
         set.status = 400;
         return { error: 'Username sudah dipakai' };
       }
 
-      // Buat user baru
       const hashedPassword = await hashPassword(password);
       const userId = randomUUID();
 
@@ -475,14 +461,13 @@ const app = new Elysia({ prefix: '/api' })
         xp: 0,
         totalReports: 0,
         initials: username.slice(0, 2).toUpperCase(),
+        lastLogin: new Date(),
       });
 
-      // Hapus OTP yang sudah digunakan
       await db.delete(otpCodes).where(eq(otpCodes.email, email));
 
       console.log('✅ User created successfully:', userId);
 
-      // Auto login setelah registrasi
       const jwtToken = await generateToken(userId, email);
       token.set({
         value: jwtToken,
@@ -518,7 +503,6 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
   
-  // SIGN IN (Step 1 - Check credentials & send OTP)
   .post('/auth/signin', async ({ body, set }) => {
     try {
       const { email, password } = body as { email: string; password: string };
@@ -580,7 +564,6 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
 
-  // VERIFY LOGIN OTP (Step 2 - Verify OTP & create session)
   .post('/auth/verify-login-otp', async ({ body, set, cookie: { token } }) => {
     try {
       const { email, code } = body as { email: string; code: string };
@@ -615,6 +598,10 @@ const app = new Elysia({ prefix: '/api' })
         set.status = 404;
         return { error: 'User tidak ditemukan' };
       }
+
+      await db.update(users)
+        .set({ lastLogin: new Date() })
+        .where(eq(users.id, user[0].id));
 
       const jwtToken = await generateToken(user[0].id, user[0].email);
       token.set({
@@ -652,7 +639,6 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
 
-  // RESEND LOGIN OTP
   .post('/auth/resend-login-otp', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
@@ -685,7 +671,6 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
   
-  // GET CURRENT USER
   .get('/auth/me', async ({ cookie: { token }, set }) => {
     try {
       const tokenValue = token.value;
@@ -698,7 +683,17 @@ const app = new Elysia({ prefix: '/api' })
         set.status = 401;
         return { error: 'Token tidak valid' };
       }
-      const user = await db.select().from(users).where(eq(users.id, payload.userId));
+      const user = await db.select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        rank: users.rank,
+        level: users.level,
+        xp: users.xp,
+        initials: users.initials,
+        totalReports: users.totalReports,
+      }).from(users).where(eq(users.id, payload.userId));
+      
       if (user.length === 0) {
         set.status = 404;
         return { error: 'User tidak ditemukan' };
@@ -711,6 +706,7 @@ const app = new Elysia({ prefix: '/api' })
         level: user[0].level,
         xp: user[0].xp,
         initials: user[0].initials,
+        totalReports: user[0].totalReports || 0,
       };
     } catch (error) {
       console.error('❌ Get user error:', error);
@@ -719,13 +715,11 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
-  // SIGN OUT
   .post('/auth/signout', ({ cookie: { token } }) => {
     token.remove();
     return { message: 'Logout berhasil' };
   })
 
-  // CHECK EMAIL FOR RESET (FORGET PASSWORD)
   .post('/auth/check-email-reset', async ({ body, set }) => {
     try {
       const { email } = body as { email: string };
@@ -761,7 +755,6 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
 
-  // FORGET RESET (OTP + Reset Password + Auto Login)
   .post('/auth/forget-reset', async ({ body, set, cookie: { token } }) => {
     try {
       const { email, code, newPassword } = body as { email: string; code: string; newPassword: string };
@@ -796,7 +789,10 @@ const app = new Elysia({ prefix: '/api' })
 
       const hashedPassword = await hashPassword(newPassword);
       await db.update(users)
-        .set({ password: hashedPassword })
+        .set({ 
+          password: hashedPassword,
+          lastLogin: new Date()
+        })
         .where(eq(users.id, user[0].id));
 
       await db.delete(otpCodes).where(eq(otpCodes.email, email));
@@ -837,7 +833,6 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
   
-  // GET ALL REGISTERED EMAILS (Admin only)
   .get('/auth/emails', async ({ cookie: { token }, set }) => {
     try {
       const tokenValue = token.value;
@@ -897,20 +892,96 @@ const app = new Elysia({ prefix: '/api' })
       const totalUsers = await db.select({ count: sql<number>`count(*)` }).from(users);
       
       const stats = [
-        { label: 'Total Reports', value: formatNumber(totalReports[0]?.count || 12480), change: '↑ +248 this week', accent: '#C8A96E' },
-        { label: 'Active Events', value: activeEvents[0]?.count || 7, change: 'Across all games', accent: '#4ECDC4' },
-        { label: 'Puzzles Solved', value: formatNumber(puzzlesSolved[0]?.count || 4230), change: '↑ +62 today', accent: '#A855F7' },
-        { label: 'Active Travelers', value: formatNumber(totalUsers[0]?.count || 31600), change: '↑ Online now: 420', accent: '#C84040' },
+        { label: 'Total Reports', value: formatNumber(totalReports[0]?.count || 0), change: '↑ +0 this week', accent: '#C8A96E' },
+        { label: 'Active Events', value: activeEvents[0]?.count || 0, change: 'Across all games', accent: '#4ECDC4' },
+        { label: 'Puzzles Solved', value: formatNumber(puzzlesSolved[0]?.count || 0), change: '↑ +0 today', accent: '#A855F7' },
+        { label: 'Active Travelers', value: formatNumber(totalUsers[0]?.count || 0), change: 'No users online', accent: '#C84040' },
       ];
       
       return { success: true, data: stats };
     } catch (error) {
       return { success: true, data: [
-        { label: 'Total Reports', value: '12.4K', change: '↑ +248 this week', accent: '#C8A96E' },
-        { label: 'Active Events', value: '7', change: 'Across all games', accent: '#4ECDC4' },
-        { label: 'Puzzles Solved', value: '4.2K', change: '↑ +62 today', accent: '#A855F7' },
-        { label: 'Active Travelers', value: '31.6K', change: '↑ Online now: 420', accent: '#C84040' },
+        { label: 'Total Reports', value: '0', change: 'No reports yet', accent: '#C8A96E' },
+        { label: 'Active Events', value: '0', change: 'No events yet', accent: '#4ECDC4' },
+        { label: 'Puzzles Solved', value: '0', change: 'No puzzles yet', accent: '#A855F7' },
+        { label: 'Active Travelers', value: '0', change: 'No users yet', accent: '#C84040' },
       ] };
+    }
+  })
+
+  // 🔥 CREATE REPORT - TAMBAHKAN INI
+  .post('/dashboard/reports', async ({ body, set }: { body: any; set: any }) => {
+    console.log('📝 CREATE REPORT endpoint dipanggil!');
+    console.log('Request body:', JSON.stringify(body, null, 2));
+    
+    try {
+      const { title, type, game, content, userId, severity, version, tags, summary } = body;
+      
+      console.log('Extracted data:', { title, type, game, userId, contentLength: content?.length });
+      
+      if (!title || !type || !game || !content || !userId) {
+        console.log('Missing required fields');
+        set.status = 400;
+        return { 
+          success: false, 
+          error: 'Missing required fields',
+          received: { 
+            title: !!title, 
+            type: !!type, 
+            game: !!game, 
+            content: !!content, 
+            userId: !!userId 
+          }
+        };
+      }
+      
+      if (title.trim().length < 5) {
+        set.status = 400;
+        return { success: false, error: 'Title must be at least 5 characters' };
+      }
+      
+      if (content.trim().length < 20) {
+        set.status = 400;
+        return { success: false, error: 'Content must be at least 20 characters' };
+      }
+      
+      const reportId = randomUUID();
+      const now = new Date();
+      
+      console.log('Creating report with ID:', reportId);
+      
+      await db.insert(reports).values({
+        id: reportId,
+        title: title.trim(),
+        type: type,
+        game: game,
+        content: content,
+        userId: userId,
+        severity: severity || 'medium',
+        status: 'published',
+        version: version || '1.0',
+        summary: summary || title.slice(0, 100),
+        rating: 0,
+        votes: 0,
+        views: 0,
+        createdAt: now,
+        updatedAt: now,
+      } as any);
+      
+      await db.update(users)
+        .set({ totalReports: sql`${users.totalReports} + 1` })
+        .where(eq(users.id, userId));
+      
+      console.log('✅ Report created successfully!');
+      
+      return { success: true, reportId };
+    } catch (error) {
+      console.error('❌ Error creating report:', error);
+      set.status = 500;
+      return { 
+        success: false, 
+        error: 'Failed to create report: ' + (error instanceof Error ? error.message : 'Unknown error') 
+      };
     }
   })
   
@@ -929,15 +1000,18 @@ const app = new Elysia({ prefix: '/api' })
       const total = await db.select({ count: sql<number>`count(*)` }).from(reports).where(whereClause);
       
       const reportsData = allReports.map(r => ({
+        id: r.id,
         title: r.title,
         type: r.type,
         game: r.game,
         author: 'Traveler',
-        initials: r.authorInitials || 'TB',
+        initials: (r as any).authorInitials || 'TB',
         rating: r.rating,
         votes: r.votes,
         date: formatRelativeDate(r.createdAt),
-        version: r.version
+        version: r.version,
+        thumbnail: (r as any).thumbnail,
+        summary: (r as any).summary
       }));
       
       return {
@@ -950,7 +1024,118 @@ const app = new Elysia({ prefix: '/api' })
         }
       };
     } catch (error) {
+      console.error('Error getting reports:', error);
       return { success: true, reports: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+  })
+  
+  // 🔥 GET SINGLE REPORT - UNTUK DETAIL REPORT
+  .get('/dashboard/reports/:id', async ({ params }: { params: { id: string } }) => {
+    try {
+      const { id } = params;
+      console.log('📖 Fetching report with ID:', id);
+      
+      const report = await db.select().from(reports).where(eq(reports.id, id));
+      
+      if (report.length === 0) {
+        return { success: false, error: 'Report not found' };
+      }
+      
+      const reportData = report[0] as any;
+      
+      // Get user info
+      const user = await db.select({ username: users.username }).from(users).where(eq(users.id, reportData.userId));
+      
+      // Increment views
+      await db.update(reports)
+        .set({ views: sql`${reports.views} + 1` })
+        .where(eq(reports.id, id));
+      
+      console.log('✅ Report found:', reportData.title);
+      
+      return {
+        success: true,
+        report: {
+          id: reportData.id,
+          title: reportData.title,
+          type: reportData.type,
+          game: reportData.game,
+          content: reportData.content,
+          severity: reportData.severity,
+          status: reportData.status,
+          version: reportData.version,
+          userId: reportData.userId,
+          username: user[0]?.username || 'Anonymous',
+          createdAt: reportData.createdAt,
+          updatedAt: reportData.updatedAt,
+          views: (reportData.views || 0) + 1,
+          votes: reportData.votes || 0,
+          thumbnail: reportData.thumbnail,
+          summary: reportData.summary,
+          tags: []
+        }
+      };
+    } catch (error) {
+      console.error('Error getting report:', error);
+      return { success: false, error: 'Failed to get report' };
+    }
+  })
+  
+  // VIEW REPORT (increment views)
+  .post('/dashboard/reports/:id/view', async ({ params }: { params: { id: string } }) => {
+    try {
+      const { id } = params;
+      await db.update(reports)
+        .set({ views: sql`${reports.views} + 1` })
+        .where(eq(reports.id, id));
+      return { success: true };
+    } catch (error) {
+      return { success: false };
+    }
+  })
+  
+  // LIKE REPORT
+  .post('/dashboard/reports/:id/like', async ({ params }: { params: { id: string } }) => {
+    try {
+      const { id } = params;
+      await db.update(reports)
+        .set({ votes: sql`${reports.votes} + 1` })
+        .where(eq(reports.id, id));
+      return { success: true };
+    } catch (error) {
+      return { success: false };
+    }
+  })
+  
+  // DELETE REPORT
+  .delete('/dashboard/reports/:id', async ({ params, body }: { params: { id: string }; body: any }) => {
+    try {
+      const { id } = params;
+      const { userId } = body as { userId: string };
+      
+      if (!userId) {
+        return { success: false, error: 'Unauthorized' };
+      }
+      
+      const report = await db.select().from(reports).where(eq(reports.id, id));
+      if (report.length === 0) {
+        return { success: false, error: 'Report not found' };
+      }
+      
+      const reportData = report[0] as any;
+      if (reportData.userId !== userId) {
+        return { success: false, error: 'Unauthorized' };
+      }
+      
+      await db.delete(reports).where(eq(reports.id, id));
+      
+      await db.update(users)
+        .set({ totalReports: sql`${users.totalReports} - 1` })
+        .where(eq(users.id, userId));
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: 'Failed to delete report' };
     }
   })
   
@@ -972,11 +1157,7 @@ const app = new Elysia({ prefix: '/api' })
       
       return { success: true, data };
     } catch (error) {
-      return { success: true, data: [
-        { title: 'Penacony Dreamscape Guide', score: 1247, rankStyle: 'text-[#C8A96E]' },
-        { title: 'Arlecchino Boss Fight', score: 892, rankStyle: 'text-[#B0B8C4]' },
-        { title: 'Hollow Zero Guide', score: 756, rankStyle: 'text-[#CD7F32]' },
-      ] };
+      return { success: true, data: [] };
     }
   })
   
@@ -988,8 +1169,6 @@ const app = new Elysia({ prefix: '/api' })
       { label: '#FarmRoute', variant: 'default', count: 142 },
       { label: '#Achievement', variant: 'gold', count: 128 },
       { label: '#Secret', variant: 'purple', count: 97 },
-      { label: '#BossFight', variant: 'default', count: 86 },
-      { label: '#EventExclusive', variant: 'cyan', count: 72 },
     ] };
   })
   
@@ -1008,7 +1187,7 @@ const app = new Elysia({ prefix: '/api' })
         .where(eq(reports.status, 'published'))
         .groupBy(reports.game);
       
-      const total = coverageData.reduce((sum, g) => sum + (g.count || 0), 0);
+      const total = coverageData.reduce((sum, g) => sum + (Number(g.count) || 0), 0);
       
       const gameLabels: Record<string, string> = {
         hsr: 'Honkai: Star Rail',
@@ -1024,13 +1203,7 @@ const app = new Elysia({ prefix: '/api' })
         hi3: 'bg-[#E05C7A]'
       };
       
-      const data = coverageData.map(g => ({
-        label: gameLabels[g.game] || g.game,
-        pct: total > 0 ? Math.round(((g.count || 0) / total) * 100) : 0,
-        fill: gameColors[g.game] || 'bg-[#C8A96E]'
-      }));
-      
-      if (data.length === 0) {
+      if (coverageData.length === 0 || total === 0) {
         return { success: true, data: [
           { label: 'Honkai: Star Rail', pct: 45, fill: 'bg-[#4ECDC4]' },
           { label: 'Genshin Impact', pct: 30, fill: 'bg-[#6DD18A]' },
@@ -1038,6 +1211,12 @@ const app = new Elysia({ prefix: '/api' })
           { label: 'Honkai Impact 3rd', pct: 10, fill: 'bg-[#E05C7A]' },
         ] };
       }
+      
+      const data = coverageData.map(g => ({
+        label: gameLabels[g.game] || g.game,
+        pct: Math.round((Number(g.count) / total) * 100),
+        fill: gameColors[g.game] || 'bg-[#C8A96E]'
+      }));
       
       return { success: true, data };
     } catch (error) {

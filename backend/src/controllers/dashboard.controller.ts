@@ -13,7 +13,6 @@ export class DashboardController {
     }
   }
 
-  // 🔥 DIPERBAIKI: Menambahkan parameter search
   static async getReports({ query }: any) {
     try {
       const { game = 'all', type = 'all', page = 1, limit = 20, search = '' } = query;
@@ -73,7 +72,7 @@ export class DashboardController {
 
   static async createReport({ body }: any) {
     try {
-      const { title, type, game, content, userId, version, thumbnail, tags } = body;
+      const { title, type, game, content, userId, version, thumbnail, tags, summary } = body;
       
       if (!title || !type || !game || !content || !userId) {
         return { success: false, error: 'Missing required fields' };
@@ -87,13 +86,68 @@ export class DashboardController {
         userId, 
         version, 
         thumbnail, 
-        tags
+        tags,
+        summary
       });
       
       return { success: true, reportId: result.reportId };
     } catch (error) {
       console.error('Controller error createReport:', error);
       return { success: false, error: 'Failed to create report' };
+    }
+  }
+
+  static async getReportById({ params }: any) {
+    try {
+      const { id } = params;
+      const report = await DashboardService.getReportById(id);
+      
+      if (!report) {
+        return { success: false, error: 'Report not found' };
+      }
+      
+      return { success: true, report };
+    } catch (error) {
+      console.error('Controller error getReportById:', error);
+      return { success: false, error: 'Failed to get report' };
+    }
+  }
+
+  static async incrementReportViews({ params }: any) {
+    try {
+      const { id } = params;
+      await DashboardService.incrementReportViews(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false };
+    }
+  }
+
+  static async likeReport({ params }: any) {
+    try {
+      const { id } = params;
+      await DashboardService.incrementReportLikes(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false };
+    }
+  }
+
+  // DELETE REPORT METHOD - MENERIMA userId DARI BODY
+  static async deleteReport({ params, body }: any) {
+    try {
+      const { id } = params;
+      const { userId } = body; // Ambil userId dari body request
+      
+      if (!userId) {
+        return { success: false, error: 'Unauthorized - User ID required' };
+      }
+      
+      const result = await DashboardService.deleteReport(id, userId);
+      return result;
+    } catch (error) {
+      console.error('Controller error deleteReport:', error);
+      return { success: false, error: 'Failed to delete report' };
     }
   }
 }

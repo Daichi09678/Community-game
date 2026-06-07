@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { renderStars } from '@/components/utils/helpers';
 import { clipHexSm } from '@/components/utils/styles';
 import { GameBadge, TypeBadge } from '@/components/common';
-import { TypeFilter } from '@/components/utils/constants'; // Import tipe dari constants
+import { TypeFilter } from '@/components/utils/constants';
 
 interface ReportItem {
   id: number;
@@ -20,8 +21,8 @@ interface ReportItem {
 
 interface ReportsSectionProps {
   filteredReports: ReportItem[];
-  activeFilter: TypeFilter;  // ← Gunakan TypeFilter
-  setActiveFilter: (f: TypeFilter) => void;  // ← Gunakan TypeFilter
+  activeFilter: TypeFilter;
+  setActiveFilter: (f: TypeFilter) => void;
   loading?: boolean;
   searchTag?: string;
 }
@@ -111,9 +112,12 @@ export function ReportsSection({
               filteredReports.map((report, idx) => (
                 <tr key={report.id || idx} className="hover:[&>td]:bg-[rgba(200,169,110,0.03)]">
                   <td className="px-4 py-[14px] text-[0.88rem] border-b border-[rgba(200,169,110,0.07)] align-middle">
-                    <span className="font-semibold text-[#E8E0CC] cursor-pointer transition-colors duration-200 hover:text-[#C8A96E]">
+                    <Link 
+                      href={`/UserHoyo/report/${report.id}`}
+                      className="font-semibold text-[#E8E0CC] cursor-pointer transition-colors duration-200 hover:text-[#C8A96E] no-underline"
+                    >
                       {report.title}
-                    </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-[14px] border-b border-[rgba(200,169,110,0.07)] align-middle">
                     <GameBadge game={report.game} />

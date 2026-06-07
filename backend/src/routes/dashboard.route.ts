@@ -6,7 +6,6 @@ import { authMiddleware } from '../middleware/auth.middleware';
 export const dashboardRoutes = new Elysia({ prefix: '/api/dashboard' })
   .use(authMiddleware)
   .get('/stats', () => DashboardController.getStats())
-  // 🔥 DIPERBAIKI: Menambahkan parameter search di schema
   .get('/reports', ({ query }) => DashboardController.getReports({ query }), {
     query: t.Object({
       game: t.Optional(t.String()),
@@ -29,6 +28,13 @@ export const dashboardRoutes = new Elysia({ prefix: '/api/dashboard' })
       userId: t.String(),
       version: t.Optional(t.String()),
       thumbnail: t.Optional(t.String()),
-      tags: t.Optional(t.Array(t.String()))
+      tags: t.Optional(t.Array(t.String())),
+      summary: t.Optional(t.String())
     })
-  });
+  })
+  // Detail report routes
+  .get('/reports/:id', ({ params }) => DashboardController.getReportById({ params }))
+  .post('/reports/:id/view', ({ params }) => DashboardController.incrementReportViews({ params }))
+  .post('/reports/:id/like', ({ params }) => DashboardController.likeReport({ params }))
+  // DELETE report route - MENERIMA BODY
+  .delete('/reports/:id', ({ params, body }) => DashboardController.deleteReport({ params, body }));

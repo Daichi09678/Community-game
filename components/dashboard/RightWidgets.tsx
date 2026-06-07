@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clipBadge, clipWidget } from '@/components/utils/styles';
 import { WidgetTitle } from '@/components/common';
 
 interface TopReport {
+  id: number;
   title: string;
   score: number;
   rankStyle: string;
@@ -40,9 +42,9 @@ interface RightWidgetsProps {
 }
 
 const defaultTopReports: TopReport[] = [
-  { title: 'Penacony Dreamscape Guide', score: 1247, rankStyle: 'text-[#C8A96E]' },
-  { title: 'Arlecchino Boss Fight', score: 892, rankStyle: 'text-[#B0B8C4]' },
-  { title: 'Hollow Zero Guide', score: 756, rankStyle: 'text-[#CD7F32]' },
+  { id: 1, title: 'Penacony Dreamscape Guide', score: 1247, rankStyle: 'text-[#C8A96E]' },
+  { id: 2, title: 'Arlecchino Boss Fight', score: 892, rankStyle: 'text-[#B0B8C4]' },
+  { id: 3, title: 'Hollow Zero Guide', score: 756, rankStyle: 'text-[#CD7F32]' },
 ];
 
 const defaultTags: TrendingTag[] = [
@@ -69,7 +71,6 @@ export function RightWidgets({
   const [activity, setActivity] = useState<ActivityData | null>(null);
   const [localLoading, setLocalLoading] = useState(false);
 
-  // Fetch activity data if not provided as prop
   useEffect(() => {
     if (propActivity) {
       setActivity(propActivity);
@@ -141,19 +142,22 @@ export function RightWidgets({
   }
 
   const displayActivity = activity || { days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], vals: [0, 0, 0, 0, 0, 0, 0], maxVal: 1 };
-  
-  // Find today's index (last day in array)
   const todayIndex = displayActivity.days.length - 1;
 
   return (
     <div>
-      {/* Top Reports */}
+      {/* Top Reports - DENGAN LINK KE DETAIL REPORT */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
         <WidgetTitle>Top Reports</WidgetTitle>
         {topReports.map((item, i) => (
           <div key={i} className="flex items-center gap-[10px] py-2 border-b border-[rgba(200,169,110,0.06)] last:border-b-0 last:pb-0">
             <span className={`font-['Space_Mono',monospace] text-[0.7rem] min-w-[20px] ${rankStyles[i]}`}>#{i + 1}</span>
-            <span className="flex-1 text-[0.78rem] text-[#9A8F78] cursor-pointer transition-colors duration-200 hover:text-[#E8E0CC] leading-[1.3] line-clamp-1">{item.title}</span>
+            <Link 
+              href={`/UserHoyo/report/${item.id}`} 
+              className="flex-1 text-[0.78rem] text-[#9A8F78] cursor-pointer transition-colors duration-200 hover:text-[#E8E0CC] leading-[1.3] line-clamp-1 no-underline"
+            >
+              {item.title}
+            </Link>
             <span className="font-['Space_Mono',monospace] text-[0.65rem] text-[#4ECDC4]">{item.score.toLocaleString()}</span>
           </div>
         ))}
@@ -184,7 +188,7 @@ export function RightWidgets({
         </div>
       </div>
 
-      {/* Activity Chart - Clean version, NO tooltip, NO numbers below */}
+      {/* Activity Chart */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
         <div className="flex items-center justify-between mb-4">
           <WidgetTitle>Activity This Week</WidgetTitle>
@@ -194,7 +198,6 @@ export function RightWidgets({
           </div>
         </div>
         
-        {/* Chart Bars - Only bars and day labels */}
         <div className="flex items-end gap-1 h-20">
           {displayActivity.days.map((day, i) => {
             const barHeight = displayActivity.maxVal > 0 

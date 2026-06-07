@@ -20,44 +20,100 @@ export class DashboardService {
   
   static async getStatCards() {
     try {
-      const summary = await queryOne(`
-        SELECT 
-          (SELECT COUNT(*) FROM reports WHERE status = 'published') as total_reports,
-          (SELECT COUNT(*) FROM reports WHERE type = 'event' AND status = 'published') as active_events,
-          (SELECT COUNT(*) FROM reports WHERE type = 'puzzle' AND status = 'published') as total_puzzles,
-          (SELECT COUNT(*) FROM users WHERE is_verified = 1) as total_users,
-          (SELECT COUNT(*) FROM users WHERE last_login > DATE_SUB(NOW(), INTERVAL 24 HOUR)) as online_today
+      // Hitung total reports (semua status)
+      const totalReportsResult = await queryOne<{ count: number }>(`
+        SELECT COUNT(*) as count FROM reports
       `);
-
-      const totalReports = summary?.total_reports || 0;
-      const activeEvents = summary?.active_events || 0;
-      const totalPuzzles = summary?.total_puzzles || 0;
-      const totalUsers = summary?.total_users || 0;
-      const onlineToday = summary?.online_today || 0;
-
+      
+      // Hitung active events
+      const activeEventsResult = await queryOne<{ count: number }>(`
+        SELECT COUNT(*) as count FROM reports 
+        WHERE type = 'event' AND status = 'published'
+      `);
+      
+      // Hitung total puzzles solved
+      const totalPuzzlesResult = await queryOne<{ count: number }>(`
+        SELECT COUNT(*) as count FROM reports 
+        WHERE type = 'puzzle' AND status = 'published'
+      `);
+      
+      // Hitung total users
+      const totalUsersResult = await queryOne<{ count: number }>(`
+        SELECT COUNT(*) as count FROM users
+      `);
+      
+      // Hitung user online dalam 24 jam terakhir
+      const onlineUsersResult = await query<{ username: string; last_login: Date }>(`
+        SELECT username, last_login FROM users 
+        WHERE last_login > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        ORDER BY last_login DESC
+      `);
+      
+      // Hitung puzzle yang dibuat hari ini
+      const puzzlesTodayResult = await queryOne<{ count: number }>(`
+        SELECT COUNT(*) as count FROM reports 
+        WHERE type = 'puzzle' 
+          AND status = 'published' 
+          AND DATE(created_at) = CURDATE()
+      `);
+      
+      // Hitung reports minggu ini vs minggu lalu
+      const weeklyReportResult = await queryOne<{ thisWeek: number; lastWeek: number }>(`
+        SELECT 
+          SUM(CASE WHEN YEARWEEK(created_at) = YEARWEEK(CURDATE()) THEN 1 ELSE 0 END) as thisWeek,
+          SUM(CASE WHEN YEARWEEK(created_at) = YEARWEEK(CURDATE() - INTERVAL 1 WEEK) THEN 1 ELSE 0 END) as lastWeek
+        FROM reports
+      `);
+      
+      const totalReports = totalReportsResult?.count || 0;
+      const activeEvents = activeEventsResult?.count || 0;
+      const totalPuzzles = totalPuzzlesResult?.count || 0;
+      const totalUsers = totalUsersResult?.count || 0;
+      const onlineUsers = onlineUsersResult || [];
+      const puzzlesToday = puzzlesTodayResult?.count || 0;
+      
+      const thisWeek = weeklyReportResult?.thisWeek || 0;
+      const lastWeek = weeklyReportResult?.lastWeek || 0;
+      const reportDiff = thisWeek - lastWeek;
+      const reportChangeText = reportDiff >= 0 
+        ? `↑ +${reportDiff} this week` 
+        : `↓ ${Math.abs(reportDiff)} this week`;
+      
+      const puzzlesChangeText = puzzlesToday > 0 
+        ? `↑ +${puzzlesToday} today` 
+        : 'No puzzles today';
+      
+      const onlineCount = onlineUsers.length;
+      // Perbaikan: hanya tampilkan jumlah, tanpa nama user
+      const onlineText = onlineCount === 1 
+        ? '1 user online' 
+        : onlineCount > 1 
+          ? `${onlineCount} users online` 
+          : 'No users online';
+      
       return [
         { 
           label: 'Total Reports', 
-          value: this.formatNumber(totalReports), 
-          change: '↑ +' + Math.floor(totalReports * 0.02) + ' this week', 
+          value: totalReports.toString(), 
+          change: reportChangeText, 
           accent: '#C8A96E' 
         },
         { 
           label: 'Active Events', 
-          value: activeEvents, 
+          value: activeEvents.toString(), 
           change: 'Across all games', 
           accent: '#4ECDC4' 
         },
         { 
           label: 'Puzzles Solved', 
-          value: this.formatNumber(totalPuzzles), 
-          change: '↑ +' + Math.floor(totalPuzzles * 0.015) + ' today', 
+          value: totalPuzzles.toString(), 
+          change: puzzlesChangeText, 
           accent: '#A855F7' 
         },
         { 
           label: 'Active Travelers', 
-          value: this.formatNumber(totalUsers), 
-          change: `↑ Online now: ${onlineToday}`, 
+          value: totalUsers.toString(), 
+          change: onlineText, 
           accent: '#C84040' 
         },
       ];
@@ -160,7 +216,7 @@ export class DashboardService {
   static async getTopReports(limit: number = 5) {
     try {
       const results = await query(`
-        SELECT title, votes as score
+        SELECT id, title, votes as score
         FROM reports
         WHERE status = 'published'
         ORDER BY votes DESC
@@ -171,11 +227,12 @@ export class DashboardService {
       
       if (results.length === 0) {
         return [
-          { title: 'No reports yet', score: 0, rankStyle: 'text-[#5A5248]' }
+          { id: 0, title: 'No reports yet', score: 0, rankStyle: 'text-[#5A5248]' }
         ];
       }
       
       return results.map((item: any, index: number) => ({
+        id: item.id,
         title: item.title,
         score: item.score || 0,
         rankStyle: rankStyles[index] || rankStyles[rankStyles.length - 1]
@@ -183,9 +240,9 @@ export class DashboardService {
     } catch (error) {
       console.error('Error getting top reports:', error);
       return [
-        { title: 'Sample Report 1', score: 100, rankStyle: 'text-[#C8A96E]' },
-        { title: 'Sample Report 2', score: 80, rankStyle: 'text-[#B0B8C4]' },
-        { title: 'Sample Report 3', score: 60, rankStyle: 'text-[#CD7F32]' },
+        { id: 1, title: 'Sample Report 1', score: 100, rankStyle: 'text-[#C8A96E]' },
+        { id: 2, title: 'Sample Report 2', score: 80, rankStyle: 'text-[#B0B8C4]' },
+        { id: 3, title: 'Sample Report 3', score: 60, rankStyle: 'text-[#CD7F32]' },
       ];
     }
   }
@@ -229,7 +286,6 @@ export class DashboardService {
     }
   }
 
-  // Activity data dari reports
   static async getActivityData() {
     try {
       const results = await query(`
@@ -340,28 +396,143 @@ export class DashboardService {
     }
   }
 
-  // 🔥 PERBAIKAN: Menggunakan column name yang benar (reports_count, bukan report_count)
+  // ✅ getReportById - menampilkan username yang benar
+  static async getReportById(reportId: string | number) {
+    try {
+      const report = await queryOne(`
+        SELECT 
+          r.id,
+          r.title,
+          r.type,
+          r.game,
+          r.content,
+          r.severity,
+          r.status,
+          r.version,
+          r.user_id as userId,
+          r.created_at as createdAt,
+          r.updated_at as updatedAt,
+          r.views,
+          r.summary,
+          r.votes,
+          u.username,
+          COALESCE(u.username, CONCAT('User #', SUBSTRING(r.user_id, 1, 6))) as author
+        FROM reports r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.id = ? AND r.status = 'published'
+      `, [reportId]);
+      
+      if (!report) return null;
+      
+      const tags = await query(
+        `SELECT tag FROM report_tags WHERE report_id = ?`,
+        [reportId]
+      );
+      
+      return {
+        id: report.id,
+        title: report.title,
+        type: report.type,
+        game: report.game,
+        content: report.content,
+        severity: report.severity,
+        status: report.status,
+        version: report.version,
+        userId: report.userId,
+        username: report.author,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
+        views: report.views || 0,
+        votes: report.votes || 0,
+        tags: tags.map((t: any) => t.tag)
+      };
+    } catch (error) {
+      console.error('Error getting report by id:', error);
+      return null;
+    }
+  }
+
+  static async incrementReportViews(reportId: string | number) {
+    try {
+      await update(
+        `UPDATE reports SET views = COALESCE(views, 0) + 1 WHERE id = ?`,
+        [reportId]
+      );
+    } catch (error) {
+      console.error('Error incrementing views:', error);
+    }
+  }
+
+  static async incrementReportLikes(reportId: string | number) {
+    try {
+      await update(
+        `UPDATE reports SET votes = COALESCE(votes, 0) + 1 WHERE id = ?`,
+        [reportId]
+      );
+    } catch (error) {
+      console.error('Error incrementing likes:', error);
+    }
+  }
+
+  // 🔥 DELETE REPORT
+  static async deleteReport(reportId: string | number, userId: string) {
+    try {
+      const report = await queryOne(
+        `SELECT user_id FROM reports WHERE id = ?`,
+        [reportId]
+      );
+      
+      if (!report) {
+        return { success: false, error: 'Report not found' };
+      }
+      
+      const user = await queryOne(
+        `SELECT role FROM users WHERE id = ?`,
+        [userId]
+      );
+      
+      const isAdmin = user?.role === 'admin';
+      const isOwner = report.user_id === userId;
+      
+      if (!isOwner && !isAdmin) {
+        return { success: false, error: 'Unauthorized' };
+      }
+      
+      await update(`DELETE FROM report_tags WHERE report_id = ?`, [reportId]);
+      await update(`DELETE FROM reports WHERE id = ?`, [reportId]);
+      
+      if (isOwner) {
+        await update(
+          `UPDATE users SET total_reports = total_reports - 1 WHERE id = ?`,
+          [userId]
+        );
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting report:', error);
+      return { success: false, error: 'Failed to delete report' };
+    }
+  }
+
   static async recordUserActivity(userId: string, activityType: 'report' | 'comment' | 'like') {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      // Mapping activity type ke column name yang benar di database
       const columnMap = {
-        report: 'reports_count',    // ← perhatikan: reports_count (plural)
-        comment: 'comments_count',  // ← comments_count
-        like: 'likes_count'         // ← likes_count
+        report: 'reports_count',
+        comment: 'comments_count',
+        like: 'likes_count'
       };
       
       const columnName = columnMap[activityType];
       
-      // Cek apakah sudah ada record untuk user ini hari ini
       const existing = await queryOne(
         `SELECT id FROM user_activity WHERE user_id = ? AND activity_date = ?`,
         [userId, today]
       );
       
       if (existing) {
-        // Update existing record
         await update(
           `UPDATE user_activity 
            SET ${columnName} = ${columnName} + 1
@@ -369,15 +540,12 @@ export class DashboardService {
           [userId, today]
         );
       } else {
-        // Insert new record
         await insert(
           `INSERT INTO user_activity (user_id, activity_date, ${columnName}, created_at)
            VALUES (?, ?, 1, NOW())`,
           [userId, today]
         );
       }
-      
-      console.log(`Activity recorded: ${activityType} for user ${userId} on ${today}`);
     } catch (error) {
       console.error('Error recording user activity:', error);
     }
@@ -398,8 +566,8 @@ export class DashboardService {
       const result = await insert(
         `INSERT INTO reports (
           title, type, game, content, user_id, version, thumbnail, summary,
-          status, rating, votes, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', 0, 0, NOW())`,
+          status, rating, votes, views, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', 0, 0, 0, NOW())`,
         [
           data.title, 
           data.type, 
@@ -414,10 +582,8 @@ export class DashboardService {
       
       const reportId = (result as any).insertId;
       
-      // Record user activity
       await this.recordUserActivity(data.userId, 'report');
       
-      // Insert tags if any
       if (data.tags && data.tags.length > 0) {
         for (const tag of data.tags) {
           await insert(
@@ -427,13 +593,10 @@ export class DashboardService {
         }
       }
       
-      // Update user's report count
       await update(
         `UPDATE users SET total_reports = total_reports + 1 WHERE id = ?`,
         [data.userId]
       );
-      
-      console.log(`Report created: ${data.title} by user ${data.userId}`);
       
       return { reportId };
     } catch (error) {
