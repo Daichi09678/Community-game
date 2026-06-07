@@ -47,6 +47,27 @@ export default function SignIn() {
       if (result.error) {
         setLoginError(result.error);
       } else if (result.success) {
+        // 🔥 SIMPAN USER ID KE LOCALSTORAGE
+        // Ambil user data dari response atau dari endpoint /me
+        const userResponse = await fetch('/api/auth/me', {
+          credentials: 'include'
+        });
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          localStorage.setItem('user', JSON.stringify({
+            id: userData.id,
+            username: userData.username,
+            email: userData.email,
+            rank: userData.rank || 'Novice Omni-Voyager',
+            level: userData.level || 1,
+            xp: userData.xp || 0,
+            initials: userData.initials || (userData.username?.slice(0, 2).toUpperCase() || 'TB'),
+            totalReports: userData.totalReports || 0
+          }));
+          console.log('User data saved to localStorage:', userData.username);
+        }
+        
         // Berhasil login → tampilkan step verifikasi OTP
         setStep('verify');
         startResendCooldown();
@@ -132,6 +153,25 @@ export default function SignIn() {
         setOtp(['','','','','','']);
         document.getElementById('otp-0')?.focus();
       } else if (result.success) {
+        // 🔥 Update user data lagi setelah verify
+        const userResponse = await fetch('/api/auth/me', {
+          credentials: 'include'
+        });
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          localStorage.setItem('user', JSON.stringify({
+            id: userData.id,
+            username: userData.username,
+            email: userData.email,
+            rank: userData.rank || 'Novice Omni-Voyager',
+            level: userData.level || 1,
+            xp: userData.xp || 0,
+            initials: userData.initials || (userData.username?.slice(0, 2).toUpperCase() || 'TB'),
+            totalReports: userData.totalReports || 0
+          }));
+        }
+        
         // Redirect ke dashboard
         window.location.href = '/UserHoyo/dashboard';
       }

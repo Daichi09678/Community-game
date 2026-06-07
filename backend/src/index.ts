@@ -1,28 +1,36 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { swagger } from '@elysiajs/swagger';
 import { dashboardRoutes } from './routes/dashboard.route';
-import { meRoutes } from './routes/me.route';
+import { getConnection } from './lib/db/mysql';
+
+// Initialize database connection
+getConnection();
 
 const app = new Elysia()
   .use(cors({
-    origin: ['http://localhost:3000'],
+    origin: true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
   }))
-  .use(swagger({
-    path: '/docs',
-    documentation: {
-      info: {
-        title: 'Triablazer API',
-        version: '1.0.0',
-        description: 'Backend API for Triablazer Dashboard',
-      },
-    },
+  .get('/health', () => ({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    message: 'Dashboard API is running'
   }))
-  .use(dashboardRoutes)
-  .use(meRoutes)
-  .get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
-  .listen(3001);
+  .use(dashboardRoutes);
 
-console.log(`🦊 Elysia running at http://localhost:3001`);
-console.log(`📚 Swagger docs at http://localhost:3001/docs`);
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Dashboard API running on http://localhost:${PORT}`);
+  console.log(`📊 Endpoints:`);
+  console.log(`   GET  /api/dashboard/stats`);
+  console.log(`   GET  /api/dashboard/reports`);
+  console.log(`   GET  /api/dashboard/top-reports`);
+  console.log(`   GET  /api/dashboard/trending-tags`);
+  console.log(`   GET  /api/dashboard/activity`);
+  console.log(`   GET  /api/dashboard/game-coverage`);
+  console.log(`   POST /api/dashboard/reports`);
+});
+
+export default app;

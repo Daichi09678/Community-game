@@ -1,53 +1,111 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { clipBadge, clipWidget } from '@/components/utils/styles';
 import { WidgetTitle } from '@/components/common';
 
-interface RightWidgetsProps {
-  accentColor: string;
-  topReports?: Array<{ title: string; score: number; rankStyle: string }>;
-  tags?: Array<{ label: string; variant: string; count: number }>;
-  activity?: { days: string[]; vals: number[]; maxVal: number };
-  coverage?: Array<{ label: string; pct: number; fill: string }>;
+interface TopReport {
+  title: string;
+  score: number;
+  rankStyle: string;
 }
 
-const defaultTopReports = [
+interface TrendingTag {
+  label: string;
+  variant: string;
+  count: number;
+}
+
+interface ActivityData {
+  days: string[];
+  vals: number[];
+  maxVal: number;
+}
+
+interface GameCoverage {
+  label: string;
+  pct: number;
+  fill: string;
+}
+
+interface RightWidgetsProps {
+  accentColor: string;
+  topReports?: TopReport[];
+  tags?: TrendingTag[];
+  activity?: ActivityData;
+  coverage?: GameCoverage[];
+  loading?: boolean;
+  onTagClick?: (tag: string) => void;
+}
+
+const defaultTopReports: TopReport[] = [
   { title: 'Penacony Dreamscape Guide', score: 1247, rankStyle: 'text-[#C8A96E]' },
   { title: 'Arlecchino Boss Fight', score: 892, rankStyle: 'text-[#B0B8C4]' },
   { title: 'Hollow Zero Guide', score: 756, rankStyle: 'text-[#CD7F32]' },
-  { title: 'Natlan Exploration Guide', score: 543, rankStyle: 'text-[#5A5248]' },
-  { title: 'Elysian Realm Tips', score: 421, rankStyle: 'text-[#5A5248]' },
 ];
 
-const defaultTags = [
+const defaultTags: TrendingTag[] = [
   { label: '#Exploration', variant: 'gold', count: 234 },
   { label: '#Lore', variant: 'cyan', count: 189 },
   { label: '#Build', variant: 'default', count: 156 },
   { label: '#FarmRoute', variant: 'default', count: 142 },
   { label: '#Achievement', variant: 'gold', count: 128 },
   { label: '#Secret', variant: 'purple', count: 97 },
-];
-
-const defaultActivity = {
-  days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-  vals: [42, 38, 45, 52, 48, 67, 58],
-  maxVal: 67
-};
-
-const defaultCoverage = [
-  { label: 'Honkai: Star Rail', pct: 45, fill: 'bg-[#4ECDC4]' },
-  { label: 'Genshin Impact', pct: 30, fill: 'bg-[#6DD18A]' },
-  { label: 'Zenless Zone Zero', pct: 15, fill: 'bg-[#A855F7]' },
-  { label: 'Honkai Impact 3rd', pct: 10, fill: 'bg-[#E05C7A]' },
+  { label: '#BossFight', variant: 'default', count: 86 },
+  { label: '#EventExclusive', variant: 'cyan', count: 72 },
 ];
 
 export function RightWidgets({ 
   accentColor, 
   topReports = defaultTopReports,
   tags = defaultTags,
-  activity = defaultActivity,
-  coverage = defaultCoverage
+  activity: propActivity,
+  coverage = [],
+  loading = false,
+  onTagClick
 }: RightWidgetsProps) {
+  const router = useRouter();
+  const [activity, setActivity] = useState<ActivityData | null>(null);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  // Fetch activity data if not provided as prop
+  useEffect(() => {
+    if (propActivity) {
+      setActivity(propActivity);
+      return;
+    }
+
+    const fetchActivity = async () => {
+      setLocalLoading(true);
+      try {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/activity`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setActivity(data.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching activity:', error);
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          days.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
+        }
+        setActivity({ days, vals: [0, 0, 0, 0, 0, 0, 0], maxVal: 1 });
+      } finally {
+        setLocalLoading(false);
+      }
+    };
+
+    if (!propActivity) {
+      fetchActivity();
+    }
+  }, [propActivity]);
+
   const tagVariant: Record<string, string> = {
     default: 'bg-[rgba(200,169,110,0.08)] border-[rgba(200,169,110,0.2)] text-[#C8A96E] hover:bg-[rgba(200,169,110,0.15)]',
     gold: 'bg-[rgba(200,169,110,0.12)] border-[rgba(200,169,110,0.3)] text-[#F0D080] hover:bg-[rgba(200,169,110,0.2)]',
@@ -57,69 +115,133 @@ export function RightWidgets({
 
   const rankStyles = ['text-[#C8A96E]', 'text-[#B0B8C4]', 'text-[#CD7F32]', 'text-[#5A5248]', 'text-[#5A5248]'];
 
+  const handleTagClick = (tagLabel: string) => {
+    const tagName = tagLabel.replace('#', '');
+    if (onTagClick) {
+      onTagClick(tagName);
+    } else {
+      router.push(`/UserHoyo/dashboard/trending-tags?tag=${encodeURIComponent(tagName)}`);
+    }
+  };
+
+  const handleViewAll = () => {
+    router.push('/UserHoyo/dashboard/trending-tags');
+  };
+
+  const isLoading = loading || localLoading;
+
+  if (isLoading) {
+    return (
+      <div>
+        <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
+          <div className="animate-pulse text-[#5A5248] text-center">Loading widgets...</div>
+        </div>
+      </div>
+    );
+  }
+
+  const displayActivity = activity || { days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], vals: [0, 0, 0, 0, 0, 0, 0], maxVal: 1 };
+  
+  // Find today's index (last day in array)
+  const todayIndex = displayActivity.days.length - 1;
+
   return (
     <div>
       {/* Top Reports */}
-      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-6 mb-5" style={clipWidget}>
+      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
         <WidgetTitle>Top Reports</WidgetTitle>
         {topReports.map((item, i) => (
           <div key={i} className="flex items-center gap-[10px] py-2 border-b border-[rgba(200,169,110,0.06)] last:border-b-0 last:pb-0">
-            <span className={`font-['Space_Mono',monospace] text-[0.72rem] min-w-[20px] ${rankStyles[i]}`}>#{i + 1}</span>
-            <span className="flex-1 text-[0.82rem] text-[#9A8F78] cursor-pointer transition-colors duration-200 hover:text-[#E8E0CC] leading-[1.3]">{item.title}</span>
-            <span className="font-['Space_Mono',monospace] text-[0.7rem] text-[#4ECDC4]">{item.score}</span>
+            <span className={`font-['Space_Mono',monospace] text-[0.7rem] min-w-[20px] ${rankStyles[i]}`}>#{i + 1}</span>
+            <span className="flex-1 text-[0.78rem] text-[#9A8F78] cursor-pointer transition-colors duration-200 hover:text-[#E8E0CC] leading-[1.3] line-clamp-1">{item.title}</span>
+            <span className="font-['Space_Mono',monospace] text-[0.65rem] text-[#4ECDC4]">{item.score.toLocaleString()}</span>
           </div>
         ))}
       </div>
 
-      {/* Trending Tags */}
-      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-6 mb-5" style={clipWidget}>
-        <WidgetTitle>Trending Tags</WidgetTitle>
+      {/* Trending Tags Widget */}
+      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
+        <div className="flex items-center justify-between mb-3">
+          <WidgetTitle>Trending Tags</WidgetTitle>
+          <button 
+            onClick={handleViewAll}
+            className="text-[0.6rem] text-[#C8A96E] font-['Space_Mono',monospace] hover:text-[#EDD28A] transition-colors cursor-pointer bg-transparent border-none"
+          >
+            View all →
+          </button>
+        </div>
         <div className="-mt-1">
-          {tags.map((tag, i) => (
-            <span key={i} style={clipBadge} className={`inline-block px-[10px] py-[3px] border text-[0.7rem] font-semibold m-[3px] cursor-pointer transition-all duration-200 ${tagVariant[tag.variant]}`}>
-              {tag.label}
+          {tags.slice(0, 8).map((tag, i) => (
+            <span
+              key={i}
+              style={clipBadge}
+              onClick={() => handleTagClick(tag.label)}
+              className={`inline-block px-[8px] py-[2px] border text-[0.65rem] font-semibold m-[2px] cursor-pointer transition-all duration-200 ${tagVariant[tag.variant]} hover:scale-105`}
+            >
+              {tag.label} ({tag.count})
             </span>
           ))}
         </div>
       </div>
 
-      {/* Activity Chart */}
-      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-6 mb-5" style={clipWidget}>
-        <WidgetTitle>Activity This Week</WidgetTitle>
-        <div className="flex items-end gap-[6px] h-16">
-          {activity.days.map((day, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <div style={{
-                width: '100%',
-                background: i === 5 ? accentColor : 'rgba(200,169,110,0.25)',
-                borderTop: `0.5px solid ${i === 5 ? accentColor : 'rgba(200,169,110,0.4)'}`,
-                height: `${Math.round((activity.vals[i] / activity.maxVal) * 52) + 8}px`,
-                transition: 'height 0.3s',
-              }} />
-              <span className="text-[0.6rem] text-[#5A5248]">{day}</span>
-            </div>
-          ))}
+      {/* Activity Chart - Clean version, NO tooltip, NO numbers below */}
+      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
+        <div className="flex items-center justify-between mb-4">
+          <WidgetTitle>Activity This Week</WidgetTitle>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#4ECDC4] animate-pulse" />
+            <span className="text-[0.55rem] text-[#4ECDC4] font-['Space_Mono',monospace]">Live</span>
+          </div>
         </div>
-        <div className="text-right mt-2 text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">
-          {activity.vals.reduce((a, b) => a + b, 0)} total reports this week
+        
+        {/* Chart Bars - Only bars and day labels */}
+        <div className="flex items-end gap-1 h-20">
+          {displayActivity.days.map((day, i) => {
+            const barHeight = displayActivity.maxVal > 0 
+              ? Math.max(6, (displayActivity.vals[i] / displayActivity.maxVal) * 60)
+              : 6;
+            const isToday = i === todayIndex;
+            const barColor = isToday ? accentColor : 'rgba(200,169,110,0.35)';
+            
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className="w-full max-w-[28px] rounded-t transition-all duration-300"
+                  style={{
+                    height: `${barHeight}px`,
+                    background: `linear-gradient(180deg, ${barColor}, ${barColor}80)`,
+                    borderRadius: '2px 2px 0 0',
+                  }}
+                />
+                <span className={`text-[0.5rem] font-['Space_Mono',monospace] ${isToday ? 'text-[#C8A96E]' : 'text-[#5A5248]'}`}>
+                  {day}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Game Coverage */}
-      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-6 mb-5" style={clipWidget}>
-        <WidgetTitle>Game Coverage</WidgetTitle>
-        {coverage.map((g, i) => (
-          <div key={i} className="mb-[10px]">
-            <div className="flex justify-between mb-1">
-              <span className="text-[0.75rem] text-[#9A8F78]">{g.label}</span>
-              <span className="text-[0.7rem] font-['Space_Mono',monospace] text-[#5A5248]">{g.pct}%</span>
+      {coverage.length > 0 && (
+        <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
+          <WidgetTitle>Game Coverage</WidgetTitle>
+          {coverage.map((g, i) => (
+            <div key={i} className="mb-3 last:mb-0">
+              <div className="flex justify-between mb-1">
+                <span className="text-[0.7rem] text-[#9A8F78]">{g.label}</span>
+                <span className="text-[0.65rem] font-['Space_Mono',monospace] text-[#5A5248]">{g.pct}%</span>
+              </div>
+              <div className="h-1 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${g.fill} transition-[width] duration-[600ms] ease-in-out rounded-full`} 
+                  style={{ width: `${g.pct}%` }} 
+                />
+              </div>
             </div>
-            <div className="h-1 bg-[rgba(255,255,255,0.05)] overflow-hidden">
-              <div className={`h-full ${g.fill} transition-[width] duration-[600ms] ease-in-out`} style={{ width: `${g.pct}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

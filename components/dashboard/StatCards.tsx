@@ -2,24 +2,25 @@
 
 import { clipWidget } from '@/components/utils/styles';
 
-interface StatCardsProps {
-  stats?: Array<{
-    label: string;
-    value: string | number;
-    change: string;
-    accent: string;
-  }>;
+interface StatCard {
+  label: string;
+  value: string | number;
+  change: string;
+  accent: string;
 }
 
-const defaultStats = [
-  { label: 'Total Reports', value: '12,480', change: '↑ +248 this week', accent: '#C8A96E' },
-  { label: 'Active Events', value: '7', change: 'Across all games', accent: '#4ECDC4' },
-  { label: 'Puzzles Solved', value: '4,230', change: '↑ +62 today', accent: '#A855F7' },
-  { label: 'Active Travelers', value: '31.6K', change: '↑ Online now: 420', accent: '#C84040' },
+interface StatCardsProps {
+  stats?: StatCard[];
+}
+
+const defaultStats: StatCard[] = [
+  { label: 'Total Reports', value: '0', change: 'Loading...', accent: '#C8A96E' },
+  { label: 'Active Events', value: '0', change: 'Loading...', accent: '#4ECDC4' },
+  { label: 'Puzzles Solved', value: '0', change: 'Loading...', accent: '#A855F7' },
+  { label: 'Active Travelers', value: '0', change: 'Loading...', accent: '#C84040' },
 ];
 
 export function StatCards({ stats }: StatCardsProps) {
-  // Gunakan default stats jika stats tidak ada atau kosong
   const displayStats = stats && stats.length > 0 ? stats : defaultStats;
 
   return (

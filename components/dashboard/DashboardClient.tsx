@@ -10,7 +10,10 @@ import { RightWidgets } from '@/components/dashboard/RightWidgets';
 import { GameFilter, TypeFilter, gameAccentMap } from '@/components/utils/constants';
 import { LoadingAnimation } from '@/components/ui';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 interface ReportItem {
+  id: number;
   title: string;
   type: string;
   game: string;
@@ -22,151 +25,139 @@ interface ReportItem {
   version: string;
 }
 
-// Default data untuk fallback
-const defaultStats = [
-  { label: 'Total Reports', value: '12,480', change: '↑ +248 this week', accent: '#C8A96E' },
-  { label: 'Active Events', value: '7', change: 'Across all games', accent: '#4ECDC4' },
-  { label: 'Puzzles Solved', value: '4,230', change: '↑ +62 today', accent: '#A855F7' },
-  { label: 'Active Travelers', value: '31.6K', change: '↑ Online now: 420', accent: '#C84040' },
-];
-
-const defaultReports: ReportItem[] = [
-  { title: 'Penacony Dreamscape Guide', type: 'mission', game: 'hsr', author: 'StellaronHunter', initials: 'SH', rating: 4.8, votes: 1247, date: '2h ago', version: '3.2' },
-  { title: 'Arlecchino Boss Fight', type: 'event', game: 'gi', author: 'LumineMain', initials: 'LM', rating: 4.9, votes: 892, date: '5h ago', version: '5.3' },
-  { title: 'Hollow Zero Guide', type: 'puzzle', game: 'zzz', author: 'Proxy_01', initials: 'PR', rating: 4.7, votes: 756, date: '1d ago', version: '1.4' },
-  { title: 'Elysian Realm Tips', type: 'mission', game: 'hi3', author: 'Captain', initials: 'CP', rating: 4.6, votes: 543, date: '2d ago', version: '7.4' },
-];
-
 export default function DashboardClient() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<TypeFilter>('all');
   const [activeGame, setActiveGame] = useState<GameFilter>('all');
-  const [statsData, setStatsData] = useState(defaultStats);
-  const [reportsData, setReportsData] = useState<ReportItem[]>(defaultReports);
-  const [topReports, setTopReports] = useState<any[]>([
-    { title: 'Penacony Dreamscape Guide', score: 1247, rankStyle: 'text-[#C8A96E]' },
-    { title: 'Arlecchino Boss Fight', score: 892, rankStyle: 'text-[#B0B8C4]' },
-    { title: 'Hollow Zero Guide', score: 756, rankStyle: 'text-[#CD7F32]' },
-  ]);
-  const [trendingTags, setTrendingTags] = useState<any[]>([
-    { label: '#Exploration', variant: 'gold', count: 234 },
-    { label: '#Lore', variant: 'cyan', count: 189 },
-    { label: '#Build', variant: 'default', count: 156 },
-  ]);
-  const [activityData, setActivityData] = useState<any>({
-    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    vals: [42, 38, 45, 52, 48, 67, 58],
-    maxVal: 67
-  });
-  const [gameCoverage, setGameCoverage] = useState<any[]>([
-    { label: 'Honkai: Star Rail', pct: 45, fill: 'bg-[#4ECDC4]' },
-    { label: 'Genshin Impact', pct: 30, fill: 'bg-[#6DD18A]' },
-    { label: 'Zenless Zone Zero', pct: 15, fill: 'bg-[#A855F7]' },
-    { label: 'Honkai Impact 3rd', pct: 10, fill: 'bg-[#E05C7A]' },
-  ]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statsData, setStatsData] = useState<any[]>([]);
+  const [reportsData, setReportsData] = useState<ReportItem[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [topReports, setTopReports] = useState<any[]>([]);
+  const [trendingTags, setTrendingTags] = useState<any[]>([]);
+  const [activityData, setActivityData] = useState<any>(null);
+  const [gameCoverage, setGameCoverage] = useState<any[]>([]);
+  const [widgetsLoading, setWidgetsLoading] = useState(true);
+
+  // Handle tag click from widget
+  const handleTagClick = (tag: string) => {
+    setSearchQuery(tag);
+    setActiveFilter('all');
+    setActiveGame('all');
+  };
+
+  const handleFilterChange = (filter: TypeFilter) => {
+    setActiveFilter(filter);
+    setSearchQuery('');
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
+
+  // Handle search from Topbar
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setActiveFilter('all');
+    setActiveGame('all');
+  };
 
   // Fetch initial dashboard data
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        // Coba fetch dari backend, jika gagal pakai default data
-        const fetchWithTimeout = async (url: string, timeout = 5000) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-          try {
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            return response;
-          } catch (error) {
-            clearTimeout(timeoutId);
-            throw error;
-          }
-        };
-
-        const [statsRes, reportsRes, topRes, tagsRes, activityRes, coverageRes] = await Promise.all([
-          fetchWithTimeout('/api/dashboard/stats').catch(() => null),
-          fetchWithTimeout('/api/dashboard/reports').catch(() => null),
-          fetchWithTimeout('/api/dashboard/top-reports').catch(() => null),
-          fetchWithTimeout('/api/dashboard/trending-tags').catch(() => null),
-          fetchWithTimeout('/api/dashboard/activity').catch(() => null),
-          fetchWithTimeout('/api/dashboard/game-coverage').catch(() => null),
-        ]);
-
-        // Handle stats
-        if (statsRes && statsRes.ok) {
+        const statsRes = await fetch(`${API_BASE_URL}/api/dashboard/stats`);
+        if (statsRes.ok) {
           const stats = await statsRes.json();
           if (stats.success && stats.data) setStatsData(stats.data);
         }
 
-        // Handle reports
-        if (reportsRes && reportsRes.ok) {
-          const reports = await reportsRes.json();
-          if (reports.success && reports.reports?.length > 0) {
-            setReportsData(reports.reports);
-          }
-        }
-
-        // Handle top reports
-        if (topRes && topRes.ok) {
-          const top = await topRes.json();
-          if (top.success && top.data?.length > 0) setTopReports(top.data);
-        }
-
-        // Handle tags
-        if (tagsRes && tagsRes.ok) {
-          const tags = await tagsRes.json();
-          if (tags.success && tags.data?.length > 0) setTrendingTags(tags.data);
-        }
-
-        // Handle activity
-        if (activityRes && activityRes.ok) {
-          const activity = await activityRes.json();
-          if (activity.success && activity.data) setActivityData(activity.data);
-        }
-
-        // Handle coverage
-        if (coverageRes && coverageRes.ok) {
-          const coverage = await coverageRes.json();
-          if (coverage.success && coverage.data?.length > 0) setGameCoverage(coverage.data);
-        }
+        await fetchReports();
+        await fetchWidgetsData();
 
       } catch (error) {
-        console.error('Error fetching dashboard, using default data:', error);
-        // Data default sudah diset di useState
+        console.error('Error fetching dashboard:', error);
       } finally {
-        setTimeout(() => setLoading(false), 500);
+        setLoading(false);
       }
     };
 
     fetchDashboardData();
   }, []);
 
-  // Fetch filtered reports when filter changes
-  useEffect(() => {
-    const fetchFilteredReports = async () => {
-      try {
-        const res = await fetch(`/api/dashboard/reports?game=${activeGame}&type=${activeFilter}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.reports?.length > 0) {
-            setReportsData(data.reports);
-          } else if (activeGame !== 'all' || activeFilter !== 'all') {
-            // Filter tidak menemukan data, tetap pakai data yang ada
-            console.log('No filtered results');
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching filtered reports:', error);
+  const fetchReports = async (game?: GameFilter, type?: TypeFilter, search?: string) => {
+    setReportsLoading(true);
+    try {
+      const gameParam = game !== undefined ? game : activeGame;
+      const typeParam = type !== undefined ? type : activeFilter;
+      const searchParam = search !== undefined ? search : searchQuery;
+      
+      let url = `${API_BASE_URL}/api/dashboard/reports?game=${gameParam}&type=${typeParam}&page=1&limit=20`;
+      if (searchParam && searchParam.trim()) {
+        url += `&search=${encodeURIComponent(searchParam.trim())}`;
       }
-    };
+      
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.reports) {
+          setReportsData(data.reports);
+        } else {
+          setReportsData([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setReportsLoading(false);
+    }
+  };
 
-    fetchFilteredReports();
-  }, [activeGame, activeFilter]);
+  const fetchWidgetsData = async () => {
+    setWidgetsLoading(true);
+    try {
+      const [topRes, tagsRes, activityRes, coverageRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/dashboard/top-reports`),
+        fetch(`${API_BASE_URL}/api/dashboard/trending-tags`),
+        fetch(`${API_BASE_URL}/api/dashboard/activity`),
+        fetch(`${API_BASE_URL}/api/dashboard/game-coverage`)
+      ]);
+
+      if (topRes.ok) {
+        const top = await topRes.json();
+        if (top.success && top.data) setTopReports(top.data);
+      }
+      if (tagsRes.ok) {
+        const tags = await tagsRes.json();
+        if (tags.success && tags.data) setTrendingTags(tags.data);
+      }
+      if (activityRes.ok) {
+        const activity = await activityRes.json();
+        if (activity.success && activity.data) setActivityData(activity.data);
+      }
+      if (coverageRes.ok) {
+        const coverage = await coverageRes.json();
+        if (coverage.success && coverage.data) setGameCoverage(coverage.data);
+      }
+    } catch (error) {
+      console.error('Error fetching widgets:', error);
+    } finally {
+      setWidgetsLoading(false);
+    }
+  };
+
+  // Fetch when filters or search change
+  useEffect(() => {
+    if (!loading) {
+      fetchReports(activeGame, activeFilter, searchQuery);
+    }
+  }, [activeGame, activeFilter, searchQuery]);
 
   const handleGameNav = (game: GameFilter) => {
     setActiveGame(game);
     setActiveFilter('all');
+    setSearchQuery('');
   };
 
   const accentColor = gameAccentMap[activeGame] || '#C8A96E';
@@ -189,11 +180,34 @@ export default function DashboardClient() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col min-h-screen relative z-10" style={{ marginLeft: '260px' }}>
-        <Topbar activeGame={activeGame} />
+        <Topbar 
+          activeGame={activeGame} 
+          onSearch={handleSearch}
+          searchQuery={searchQuery}
+          onClearSearch={clearSearch}
+        />
 
         <div style={{ padding: '32px', flex: 1 }}>
           <StatCards stats={statsData} />
+          
           <GamePills activeGame={activeGame} onGameChange={handleGameNav} />
+
+          {/* Active search indicator */}
+          {searchQuery && (
+            <div className="mb-4 p-3 bg-[rgba(200,169,110,0.1)] border border-[rgba(200,169,110,0.3)] rounded-md flex items-center justify-between" style={{ clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-[0.75rem] text-[#C8A96E] font-semibold">Search results for:</span>
+                <span className="font-bold text-[#E8E0CC]">"{searchQuery}"</span>
+                <span className="text-[0.7rem] text-[#5A5248]">({reportsData.length} reports found)</span>
+              </div>
+              <button
+                onClick={clearSearch}
+                className="text-[0.7rem] text-[#E05C7A] hover:text-[#E85050] transition-colors bg-transparent border-none cursor-pointer"
+              >
+                ✕ Clear search
+              </button>
+            </div>
+          )}
 
           <div style={{
             display: 'grid',
@@ -203,7 +217,9 @@ export default function DashboardClient() {
             <ReportsSection
               filteredReports={reportsData}
               activeFilter={activeFilter}
-              setActiveFilter={setActiveFilter}
+              setActiveFilter={handleFilterChange}
+              loading={reportsLoading}
+              searchTag={searchQuery}
             />
             <RightWidgets 
               accentColor={accentColor}
@@ -211,6 +227,8 @@ export default function DashboardClient() {
               tags={trendingTags}
               activity={activityData}
               coverage={gameCoverage}
+              loading={widgetsLoading}
+              onTagClick={handleTagClick}
             />
           </div>
         </div>

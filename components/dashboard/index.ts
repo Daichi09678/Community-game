@@ -1,3 +1,4 @@
+// components/dashboard/index.ts
 export { Sidebar } from './Sidebar';
 export { Topbar } from './Topbar';
 export { StatCards } from './StatCards';

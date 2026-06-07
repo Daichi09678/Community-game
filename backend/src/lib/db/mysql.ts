@@ -1,3 +1,4 @@
+// backend/src/lib/db/mysql.ts
 import mysql from 'mysql2/promise';
 
 let pool: mysql.Pool | null = null;
@@ -16,17 +17,44 @@ export async function getConnection() {
       enableKeepAlive: true,
       keepAliveInitialDelay: 0,
     });
+    
+    try {
+      const conn = await pool.getConnection();
+      console.log('✅ MySQL database connected');
+      conn.release();
+    } catch (error) {
+      console.error('❌ MySQL connection failed:', error);
+    }
   }
   return pool;
 }
 
+// Gunakan query() untuk prepared statements (bukan execute)
 export async function query<T = any>(sql: string, params?: any[]): Promise<T[]> {
   const conn = await getConnection();
-  const [rows] = await conn.execute(sql, params);
+  const [rows] = await conn.query(sql, params);
   return rows as T[];
 }
 
 export async function queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
   const rows = await query<T>(sql, params);
   return rows.length > 0 ? rows[0] : null;
+}
+
+export async function insert(sql: string, params?: any[]): Promise<any> {
+  const conn = await getConnection();
+  const [result] = await conn.query(sql, params);
+  return result;
+}
+
+export async function update(sql: string, params?: any[]): Promise<any> {
+  const conn = await getConnection();
+  const [result] = await conn.query(sql, params);
+  return result;
+}
+
+export async function deleteQuery(sql: string, params?: any[]): Promise<any> {
+  const conn = await getConnection();
+  const [result] = await conn.query(sql, params);
+  return result;
 }
