@@ -1,13 +1,7 @@
-// components/all-report/AllReportClient.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/dashboard/Sidebar';
-import {
-  ReportsTable,
-  RightWidgets,
-  clipBtn,
-} from '@/components/all-report';
+import { SidebarAllReport, ReportsTable, RightWidgets, GamePills, clipBtn } from './index';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -48,7 +42,6 @@ export default function AllReportClient() {
     totalItems: 0,
   });
 
-  // Fetch reports from API
   const fetchReports = async (page: number = 1) => {
     setLoading(true);
     try {
@@ -84,7 +77,6 @@ export default function AllReportClient() {
     }
   };
 
-  // Initial load and filter changes
   useEffect(() => {
     fetchReports(1);
   }, [gameFilter, filterType, searchQuery]);
@@ -99,26 +91,6 @@ export default function AllReportClient() {
     setSearchQuery('');
   };
 
-  const gamePillClass = (g: GameFilter): string => {
-    const base = 'px-[14px] py-[5px] text-[0.75rem] font-bold tracking-[0.08em] uppercase cursor-pointer transition-all duration-200 border border-transparent text-[#5A5248] bg-[rgba(255,255,255,0.03)]';
-    const activeMap: Record<string, string> = {
-      all: 'border-[#C8A96E] text-[#C8A96E] bg-[rgba(200,169,110,0.08)]',
-      hsr: 'border-[#4ECDC4] text-[#4ECDC4] bg-[rgba(78,205,196,0.08)]',
-      gi:  'border-[#6DD18A] text-[#6DD18A] bg-[rgba(109,209,138,0.08)]',
-      zzz: 'border-[#A855F7] text-[#A855F7] bg-[rgba(168,85,247,0.08)]',
-      hi3: 'border-[#E05C7A] text-[#E05C7A] bg-[rgba(224,92,122,0.08)]',
-    };
-    const hoverMap: Record<string, string> = {
-      all: 'hover:border-[#C8A96E] hover:text-[#C8A96E]',
-      hsr: 'hover:border-[#4ECDC4] hover:text-[#4ECDC4]',
-      gi:  'hover:border-[#6DD18A] hover:text-[#6DD18A]',
-      zzz: 'hover:border-[#A855F7] hover:text-[#A855F7]',
-      hi3: 'hover:border-[#E05C7A] hover:text-[#E05C7A]',
-    };
-    return `${base} ${gameFilter === g ? activeMap[g] : hoverMap[g]}`;
-  };
-
-  // Loading screen
   if (loading && reports.length === 0) {
     return (
       <div className="min-h-screen bg-[#050810] flex items-center justify-center">
@@ -176,8 +148,8 @@ export default function AllReportClient() {
         }}
       />
 
-      {/* SIDEBAR - Menggunakan komponen Sidebar dari dashboard */}
-      <Sidebar />
+      {/* SIDEBAR ALL REPORT */}
+      <SidebarAllReport />
 
       {/* MAIN CONTENT */}
       <main className="flex-1 ml-[260px] flex flex-col min-h-screen relative z-10 max-md:ml-0">
@@ -229,19 +201,8 @@ export default function AllReportClient() {
 
         {/* Content */}
         <div className="p-8 flex-1">
-          {/* Game Filters */}
-          <div className="flex gap-2 mb-6 flex-wrap">
-            {(['all', 'hsr', 'gi', 'zzz', 'hi3'] as const).map(g => (
-              <span
-                key={g}
-                className={gamePillClass(g)}
-                onClick={() => setGameFilter(g)}
-                style={{ clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }}
-              >
-                {gameLabels[g]}
-              </span>
-            ))}
-          </div>
+          {/* Game Filters - MENGGUNAKAN KOMPONEN GAME PILLS */}
+          <GamePills activeGame={gameFilter} onGameChange={setGameFilter} />
 
           {/* Reports Table and Right Widgets */}
           <div className="grid grid-cols-[1fr_280px] gap-6 max-[1100px]:grid-cols-1">

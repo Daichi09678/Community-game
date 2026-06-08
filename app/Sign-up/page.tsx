@@ -32,7 +32,6 @@ export default function SignUp() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
-  const [verificationId, setVerificationId] = useState<string | null>(null); // Untuk tracking session verifikasi
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Countdown timer for resend
@@ -42,6 +41,26 @@ export default function SignUp() {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
+  // Check session after sign up
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const user = await response.json();
+          console.log('✅ Session active for:', user.username);
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+      } catch (error) {
+        console.error('Session check error:', error);
+      }
+    };
+    
+    checkSession();
+  }, []);
+
   // ---------- API calls (FIXED ENDPOINTS) ----------
   const api = {
     sendOTP: async (email: string) => {
@@ -50,6 +69,7 @@ export default function SignUp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+        credentials: 'include',
       });
       const data = await res.json();
       console.log('📥 Send OTP response:', data);
@@ -61,6 +81,7 @@ export default function SignUp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+        credentials: 'include',
       });
       const data = await res.json();
       console.log('📥 Resend OTP response:', data);
@@ -72,6 +93,7 @@ export default function SignUp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code }),
+        credentials: 'include',
       });
       const data = await res.json();
       console.log('📥 Verify OTP response:', data);
@@ -204,16 +226,21 @@ export default function SignUp() {
       const result = await api.verifyOTP(email, code);
       if (result.error) {
         setOtpError(result.error);
+        setOtpVerified(false);
       } else if (result.success || result.verified) {
         setOtpVerified(true);
-        // Tunggu sebentar sebelum pindah ke step berikutnya
+        setOtpError('');
+        console.log('✅ OTP Verified successfully!');
+        // Pindah ke step berikutnya setelah verifikasi berhasil
         setTimeout(() => setStep(4), 800);
       } else {
         setOtpError('Verifikasi gagal. Silakan coba lagi.');
+        setOtpVerified(false);
       }
     } catch (err) {
       console.error('Verify OTP error:', err);
       setOtpError('Gagal memverifikasi kode. Periksa koneksi internet.');
+      setOtpVerified(false);
     } finally {
       setLoading(false);
     }
@@ -255,16 +282,15 @@ export default function SignUp() {
       return;
     }
     
+    // Pastikan OTP sudah diverifikasi
+    if (!otpVerified) {
+      alert('Silakan verifikasi OTP terlebih dahulu');
+      return;
+    }
+    
     setLoading(true);
     try {
       const otpCode = otp.join('');
-      
-      // Pastikan OTP sudah diverifikasi
-      if (!otpVerified) {
-        alert('Silakan verifikasi OTP terlebih dahulu');
-        setLoading(false);
-        return;
-      }
 
       console.log('📝 Submitting signup with:', { username, email, password: '***', otpCode });
 
@@ -272,6 +298,7 @@ export default function SignUp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password, otpCode }),
+        credentials: 'include',
       });
 
       const signUpResult = await signUpResponse.json();
@@ -282,6 +309,20 @@ export default function SignUp() {
       }
 
       console.log('✅ Signup success:', signUpResult);
+
+      // Simpan user ke localStorage
+      if (signUpResult.user) {
+        localStorage.setItem('user', JSON.stringify({
+          id: signUpResult.user.id,
+          username: signUpResult.user.username,
+          email: signUpResult.user.email,
+          rank: signUpResult.user.rank || 'Novice Omni-Voyager',
+          level: signUpResult.user.level || 1,
+          xp: 0,
+          initials: username.slice(0, 2).toUpperCase(),
+          totalReports: 0
+        }));
+      }
 
       // Redirect ke dashboard
       window.location.href = '/UserHoyo/dashboard';

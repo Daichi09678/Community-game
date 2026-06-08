@@ -503,6 +503,10 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
   
+  // =============================================
+  // SIGN IN - UPDATED WITH ROLE AND REDIRECT
+  // =============================================
+  
   .post('/auth/signin', async ({ body, set }) => {
     try {
       const { email, password } = body as { email: string; password: string };
@@ -545,11 +549,18 @@ const app = new Elysia({ prefix: '/api' })
       
       console.log('✅ OTP sent to:', email);
 
+      // Tentukan redirect URL berdasarkan role
+      const redirectUrl = user[0].role === 'admin' 
+        ? '/HoyoAdmin/dashboard-admin' 
+        : '/UserHoyo/dashboard';
+
       return {
         success: true,
         message: 'OTP sent to your email',
         requiresOTP: true,
         email: email,
+        role: user[0].role,
+        redirectUrl: redirectUrl,
         devOTP: process.env.NODE_ENV === 'development' ? code : undefined
       };
     } catch (error) {
@@ -564,6 +575,10 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
 
+  // =============================================
+  // VERIFY LOGIN OTP - UPDATED WITH ROLE AND REDIRECT
+  // =============================================
+  
   .post('/auth/verify-login-otp', async ({ body, set, cookie: { token } }) => {
     try {
       const { email, code } = body as { email: string; code: string };
@@ -614,17 +629,26 @@ const app = new Elysia({ prefix: '/api' })
       });
 
       console.log('✅ Login OTP verified successfully for:', email);
+      console.log('👤 User role:', user[0].role);
+
+      // Tentukan redirect URL berdasarkan role
+      const redirectUrl = user[0].role === 'admin' 
+        ? '/HoyoAdmin/dashboard-admin' 
+        : '/UserHoyo/dashboard';
 
       return {
         success: true,
         verified: true,
         message: 'Verifikasi berhasil',
+        role: user[0].role,
+        redirectUrl: redirectUrl,
         user: {
           id: user[0].id,
           username: user[0].username,
           email: user[0].email,
           rank: user[0].rank,
           level: user[0].level,
+          role: user[0].role,
         }
       };
     } catch (error) {
@@ -692,6 +716,7 @@ const app = new Elysia({ prefix: '/api' })
         xp: users.xp,
         initials: users.initials,
         totalReports: users.totalReports,
+        role: users.role,
       }).from(users).where(eq(users.id, payload.userId));
       
       if (user.length === 0) {
@@ -707,6 +732,7 @@ const app = new Elysia({ prefix: '/api' })
         xp: user[0].xp,
         initials: user[0].initials,
         totalReports: user[0].totalReports || 0,
+        role: user[0].role || 'user',
       };
     } catch (error) {
       console.error('❌ Get user error:', error);
@@ -881,7 +907,7 @@ const app = new Elysia({ prefix: '/api' })
   })
   
   // =============================================
-  // DASHBOARD ENDPOINTS
+  // DASHBOARD ENDPOINTS (sama seperti sebelumnya)
   // =============================================
   
   .get('/dashboard/stats', async () => {
@@ -909,7 +935,6 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
 
-  // 🔥 CREATE REPORT - TAMBAHKAN INI
   .post('/dashboard/reports', async ({ body, set }: { body: any; set: any }) => {
     console.log('📝 CREATE REPORT endpoint dipanggil!');
     console.log('Request body:', JSON.stringify(body, null, 2));
@@ -1029,7 +1054,6 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
-  // 🔥 GET SINGLE REPORT - UNTUK DETAIL REPORT
   .get('/dashboard/reports/:id', async ({ params }: { params: { id: string } }) => {
     try {
       const { id } = params;
@@ -1043,15 +1067,17 @@ const app = new Elysia({ prefix: '/api' })
       
       const reportData = report[0] as any;
       
-      // Get user info
-      const user = await db.select({ username: users.username }).from(users).where(eq(users.id, reportData.userId));
+      const user = await db.select({ 
+        id: users.id,
+        username: users.username 
+      }).from(users).where(eq(users.id, reportData.userId));
       
-      // Increment views
       await db.update(reports)
         .set({ views: sql`${reports.views} + 1` })
         .where(eq(reports.id, id));
       
       console.log('✅ Report found:', reportData.title);
+      console.log('👤 User ID:', reportData.userId, 'Username:', user[0]?.username);
       
       return {
         success: true,
@@ -1081,7 +1107,6 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
-  // VIEW REPORT (increment views)
   .post('/dashboard/reports/:id/view', async ({ params }: { params: { id: string } }) => {
     try {
       const { id } = params;
@@ -1094,7 +1119,6 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
-  // LIKE REPORT
   .post('/dashboard/reports/:id/like', async ({ params }: { params: { id: string } }) => {
     try {
       const { id } = params;
@@ -1107,7 +1131,6 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
-  // DELETE REPORT
   .delete('/dashboard/reports/:id', async ({ params, body }: { params: { id: string }; body: any }) => {
     try {
       const { id } = params;
@@ -1123,8 +1146,9 @@ const app = new Elysia({ prefix: '/api' })
       }
       
       const reportData = report[0] as any;
+      
       if (reportData.userId !== userId) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: 'Unauthorized - You can only delete your own reports' };
       }
       
       await db.delete(reports).where(eq(reports.id, id));
@@ -1133,15 +1157,22 @@ const app = new Elysia({ prefix: '/api' })
         .set({ totalReports: sql`${users.totalReports} - 1` })
         .where(eq(users.id, userId));
       
+      console.log('✅ Report deleted successfully by owner:', userId);
+      
       return { success: true };
     } catch (error) {
+      console.error('Error deleting report:', error);
       return { success: false, error: 'Failed to delete report' };
     }
   })
   
   .get('/dashboard/top-reports', async () => {
     try {
-      const topReports = await db.select({ title: reports.title, score: reports.votes })
+      const topReports = await db.select({ 
+        id: reports.id,
+        title: reports.title, 
+        score: reports.votes 
+      })
         .from(reports)
         .where(eq(reports.status, 'published'))
         .orderBy(desc(reports.votes))
@@ -1150,6 +1181,7 @@ const app = new Elysia({ prefix: '/api' })
       const rankStyles = ['text-[#C8A96E]', 'text-[#B0B8C4]', 'text-[#CD7F32]', 'text-[#5A5248]', 'text-[#5A5248]'];
       
       const data = topReports.map((item, index) => ({
+        id: item.id,
         title: item.title,
         score: item.score || 0,
         rankStyle: rankStyles[index]
@@ -1229,7 +1261,6 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
-  // GET USER PROFILE
   .get('/profile/:userId', async ({ params: { userId }, set }) => {
     try {
       const user = await db.select({

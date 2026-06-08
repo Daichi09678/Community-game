@@ -57,61 +57,58 @@ export default function ForgotPassword() {
 
   // ---------- STEP 1: Send OTP ----------
   const handleSendOTP = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  // ✅ Tambahkan validasi email sebelum kirim
-  if (!email || !email.includes('@') || !email.includes('.')) {
-    setEmailError('Masukkan email yang valid');
-    return;
-  }
-  
-  setLoading(true);
-  setEmailError('');
-  
-  try {
-    // ✅ Cek email terdaftar dulu
-    const checkRes = await fetch('/api/auth/check-email-reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    const checkResult = await checkRes.json();
+    e.preventDefault();
     
-    if (checkResult.error) {
-      setEmailError(checkResult.error);
+    if (!email || !email.includes('@') || !email.includes('.')) {
+      setEmailError('Masukkan email yang valid');
+      return;
+    }
+    
+    setLoading(true);
+    setEmailError('');
+    
+    try {
+      const checkRes = await fetch('/api/auth/check-email-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const checkResult = await checkRes.json();
+      
+      if (checkResult.error) {
+        setEmailError(checkResult.error);
+        setLoading(false);
+        return;
+      }
+      
+      const res = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      
+      const result = await res.json();
+      
+      if (result.error) {
+        setEmailError(result.error);
+        return;
+      }
+      
+      if (result.devOTP) console.log('Dev OTP:', result.devOTP);
+      setOtp(Array(OTP_LENGTH).fill(''));
+      setOtpError('');
+      setOtpVerified(false);
+      setResendCooldown(60);
+      setStep(2);
+      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      
+    } catch (error) {
+      console.error('Error:', error);
+      setEmailError('Gagal mengirim kode. Coba lagi nanti.');
+    } finally {
       setLoading(false);
-      return;
     }
-    
-    // Kirim OTP
-    const res = await fetch('/api/otp/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim() }), // ✅ trim email
-    });
-    
-    const result = await res.json();
-    
-    if (result.error) {
-      setEmailError(result.error);
-      return;
-    }
-    
-    if (result.devOTP) console.log('Dev OTP:', result.devOTP);
-    setOtp(Array(OTP_LENGTH).fill(''));
-    setOtpError('');
-    setOtpVerified(false);
-    setResendCooldown(60);
-    setStep(2);
-    setTimeout(() => otpRefs.current[0]?.focus(), 100);
-    
-  } catch (error) {
-    console.error('Error:', error);
-    setEmailError('Gagal mengirim kode. Coba lagi nanti.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // ---------- OTP Handlers ----------
   const handleOtpChange = (index: number, value: string) => {
@@ -159,10 +156,63 @@ export default function ForgotPassword() {
     finally { setResendLoading(false); }
   };
 
-  // ---------- STEP 3: Reset Password (OTP + New Password langsung) ----------
+  // 🔥 VERIFY OTP SEBELUM LANJUT KE STEP 3
+  const handleVerifyOTPAndContinue = async () => {
+    const code = otp.join('');
+    if (code.length < OTP_LENGTH) {
+      setOtpError('Please enter all 6 digits.');
+      return;
+    }
+    
+    setLoading(true);
+    setOtpError('');
+    
+    try {
+      const res = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+      const result = await res.json();
+      
+      if (result.error) {
+        setOtpError(result.error);
+        setLoading(false);
+        return;
+      }
+      
+      if (result.verified || result.success) {
+        setOtpVerified(true);
+        setStep(3);
+      } else {
+        setOtpError('Invalid OTP code');
+      }
+    } catch (err) {
+      console.error('Verify OTP error:', err);
+      setOtpError('Failed to verify OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔥 RESET PASSWORD - DENGAN REDIRECT BERDASARKAN ROLE
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passwordsMatch) return;
+    
+    if (!passwordsMatch) {
+      setOtpError('Password tidak cocok');
+      return;
+    }
+    
+    if (newPassword.length < 8) {
+      setOtpError('Password minimal 8 karakter');
+      return;
+    }
+    
+    if (!otpVerified) {
+      setOtpError('OTP belum diverifikasi. Silakan kembali ke langkah sebelumnya.');
+      return;
+    }
     
     const code = otp.join('');
     if (code.length < OTP_LENGTH) { 
@@ -171,28 +221,57 @@ export default function ForgotPassword() {
     }
     
     setLoading(true);
+    setOtpError('');
+    
     try {
+      console.log('Sending reset request:', { email, code, newPassword: '***' });
+      
       const res = await fetch('/api/auth/forget-reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ 
-          email, 
-          code, 
-          newPassword 
+          email,
+          code,
+          newPassword
         }),
       });
+      
       const result = await res.json();
+      console.log('Reset response:', result);
       
       if (result.error) { 
         setOtpError(result.error); 
       } else if (result.success) {
         setResetSuccess(true);
-        // Redirect ke dashboard setelah 2 detik
+        
+        // Simpan user ke localStorage
+        if (result.user) {
+          localStorage.setItem('user', JSON.stringify({
+            id: result.user.id,
+            username: result.user.username,
+            email: result.user.email,
+            rank: result.user.rank || 'Novice Omni-Voyager',
+            level: result.user.level || 1,
+            initials: result.user.username?.slice(0, 2).toUpperCase() || 'TB',
+            totalReports: 0,
+            role: result.user.role || 'user'
+          }));
+        }
+        
+        // 🔥 REDIRECT BERDASARKAN ROLE
+        const userRole = result.user?.role || 'user';
+        
         setTimeout(() => {
-          router.push('/UserHoyo/dashboard');
+          if (userRole === 'admin') {
+            router.push('/HoyoAdmin/dashboard-admin');
+          } else {
+            router.push('/UserHoyo/dashboard');
+          }
         }, 2000);
       }
-    } catch { 
+    } catch (err) { 
+      console.error('Reset error:', err);
       setOtpError('Reset failed. Please try again.'); 
     } finally { 
       setLoading(false); 
@@ -537,7 +616,7 @@ export default function ForgotPassword() {
 
                 {/* ── STEP 2 — Verify OTP ── */}
                 {step === 2 && !resetSuccess && (
-                  <form key="step2" className="slide-in" onSubmit={(e) => e.preventDefault()}>
+                  <div className="slide-in">
                     {/* Info box */}
                     <div style={{padding:'1rem',background:'rgba(78,205,196,.04)',border:'.5px solid rgba(78,205,196,.18)',clipPath:'polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)',marginBottom:'1.5rem',display:'flex',gap:'.75rem',alignItems:'flex-start'}}>
                       <div style={{flexShrink:0,marginTop:2}}>
@@ -602,23 +681,33 @@ export default function ForgotPassword() {
                       <button 
                         type="button" 
                         className="submit-btn" 
-                        disabled={!otpFilled} 
+                        disabled={!otpFilled || loading} 
                         style={{flex:1}}
-                        onClick={() => setStep(3)}
+                        onClick={handleVerifyOTPAndContinue}
                       >
-                        <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-                          Continue
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
-                        </span>
+                        {loading ? (
+                          <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                            <svg className="spinner" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#060911" strokeWidth="2">
+                              <path d="M7 1a6 6 0 016 6" strokeLinecap="round"/>
+                            </svg>
+                            Verifying...
+                          </span>
+                        ) : (
+                          <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                            Continue
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round">
+                              <path d="M3 8h10M9 4l4 4-4 4"/>
+                            </svg>
+                          </span>
+                        )}
                       </button>
                     </div>
-                  </form>
+                  </div>
                 )}
 
                 {/* ── STEP 3 — Reforge Password ── */}
                 {step === 3 && !resetSuccess && (
                   <form key="step3" className="slide-in" onSubmit={handleResetPassword}>
-
                     <div style={{marginBottom:'1rem'}}>
                       <label style={{display:'block',fontSize:'.62rem',fontWeight:700,letterSpacing:'.16em',textTransform:'uppercase',color:'#6A6058',marginBottom:'.4rem'}}>
                         <span className="fc">New Cipher</span> &nbsp;/&nbsp; New Password
@@ -676,8 +765,8 @@ export default function ForgotPassword() {
                     </div>
 
                     <div style={{display:'flex',gap:'.65rem'}}>
-                      <button type="button" className="back-btn" onClick={()=>setStep(2)}>← Back</button>
-                      <button type="submit" className="submit-btn" disabled={!passwordsMatch||loading} style={{flex:1}}>
+                      <button type="button" className="back-btn" onClick={() => setStep(2)}>← Back</button>
+                      <button type="submit" className="submit-btn" disabled={!passwordsMatch || loading} style={{flex:1}}>
                         {loading ? (
                           <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
                             <svg className="spinner" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#060911" strokeWidth="2">
@@ -688,7 +777,9 @@ export default function ForgotPassword() {
                         ) : (
                           <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
                             Reforge Password
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#060911" strokeWidth="2" strokeLinecap="round">
+                              <path d="M3 8h10M9 4l4 4-4 4"/>
+                            </svg>
                           </span>
                         )}
                       </button>
@@ -726,7 +817,7 @@ export default function ForgotPassword() {
                   </div>
                 )}
 
-                {/* Sign in link (non-success steps) */}
+                {/* Sign in link */}
                 {!resetSuccess && step !== 3 && (
                   <div style={{textAlign:'center',paddingTop:'1.25rem',marginTop:'1.25rem',borderTop:'.5px solid rgba(200,169,110,.08)'}}>
                     <span style={{fontSize:'.78rem',color:'#4A4540',fontWeight:600}}>Remembered your password? </span>

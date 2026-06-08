@@ -10,7 +10,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const clipHex = { clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' } as React.CSSProperties;
 const clipBadge = { clipPath: 'polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%)' } as React.CSSProperties;
 
-// ─── ICON COMPONENTS ─────────────────────────────────────────────────────────
+// ─── ICON COMPONENTS (sama seperti sebelumnya) ───────────────────────────────
 const GridIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <rect x="1" y="1" width="6" height="6" stroke="currentColor" strokeWidth="1.2" rx="1"/>
@@ -83,13 +83,6 @@ const InfoIcon = () => (
   </svg>
 );
 
-const TagIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M2 2h6l6 6-6 6-6-6V2z" stroke="currentColor" strokeWidth="1.2"/>
-    <circle cx="5" cy="5" r="1" fill="currentColor"/>
-  </svg>
-);
-
 // ─── NAV HELPERS ─────────────────────────────────────────────────────────────
 function NavGroupLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -99,14 +92,12 @@ function NavGroupLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavBadge({ children, variant }: { children: React.ReactNode; variant?: 'new' | 'live' }) {
+function NavBadge({ children, variant }: { children: React.ReactNode; variant?: 'new' }) {
   return (
     <span
       className={`ml-auto font-['Space_Mono',monospace] text-[0.65rem] px-2 py-[2px]
         ${variant === 'new'
           ? 'bg-[rgba(78,205,196,0.15)] text-[#4ECDC4]'
-          : variant === 'live'
-          ? 'bg-[rgba(78,205,196,0.15)] text-[#4ECDC4] animate-pulse'
           : 'bg-[rgba(200,169,110,0.15)] text-[#C8A96E]'}`}
       style={clipBadge}
     >
@@ -121,10 +112,9 @@ interface NavItemProps {
   label: string;
   badge?: string;
   isNew?: boolean;
-  isLive?: boolean;
 }
 
-function NavItem({ href, icon, label, badge, isNew, isLive }: NavItemProps) {
+function NavItem({ href, icon, label, badge, isNew }: NavItemProps) {
   const pathname = usePathname();
   const isActive = href ? pathname === href : false;
 
@@ -144,7 +134,6 @@ function NavItem({ href, icon, label, badge, isNew, isLive }: NavItemProps) {
       <span className="flex-1">{label}</span>
       {badge && <NavBadge>{badge}</NavBadge>}
       {isNew && <NavBadge variant="new">New</NavBadge>}
-      {isLive && <NavBadge variant="live">● Live</NavBadge>}
     </>
   );
 
@@ -163,9 +152,8 @@ function NavItem({ href, icon, label, badge, isNew, isLive }: NavItemProps) {
   );
 }
 
-// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
-export function Sidebar() {
-  const pathname = usePathname();
+// ─── SIDEBAR ALL REPORT ─────────────────────────────────────────────────────
+export function SidebarAllReport() {
   const [user, setUser] = useState<{
     id: string;
     username: string;
@@ -177,47 +165,32 @@ export function Sidebar() {
     totalReports: number;
   } | null>(null);
   const [totalReports, setTotalReports] = useState(0);
-  const [categoryCounts, setCategoryCounts] = useState({
-    guide: 0,
-    event: 0,
-    puzzle: 0,
-    build: 0,
-  });
   const [loading, setLoading] = useState(true);
 
-  // Ambil total report count dan category counts
-  const fetchStats = async () => {
+  // Ambil total report count dari endpoint yang sudah ada
+  const fetchTotalReports = async () => {
     try {
+      // Gunakan endpoint /dashboard/reports yang sudah ada
       const response = await fetch(`${API_BASE_URL}/api/dashboard/reports?page=1&limit=1`);
+      console.log('Fetching total reports, response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Data received:', data);
+        
+        // Ambil totalItems dari pagination
         if (data.pagination && typeof data.pagination.totalItems === 'number') {
-          setTotalReports(data.pagination.totalItems);
+          const total = data.pagination.totalItems;
+          setTotalReports(total);
+          console.log('Total reports set to:', total);
+        } else {
+          console.log('No pagination.totalItems found in response');
         }
+      } else {
+        console.log('Response not OK:', response.status);
       }
     } catch (error) {
       console.error('Error fetching total reports:', error);
-    }
-  };
-
-  // Fetch category counts
-  const fetchCategoryCounts = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/dashboard/reports?page=1&limit=1000`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.reports && Array.isArray(data.reports)) {
-          const counts = {
-            guide: data.reports.filter((r: any) => r.type === 'guide').length,
-            event: data.reports.filter((r: any) => r.type === 'event').length,
-            puzzle: data.reports.filter((r: any) => r.type === 'puzzle').length,
-            build: data.reports.filter((r: any) => r.type === 'build').length,
-          };
-          setCategoryCounts(counts);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching category counts:', error);
     }
   };
 
@@ -282,36 +255,33 @@ export function Sidebar() {
   };
 
   useEffect(() => {
-    fetchStats();
-    fetchCategoryCounts();
+    fetchTotalReports();
     fetchUser();
     
-    const statsInterval = setInterval(fetchStats, 15000);
-    const categoryInterval = setInterval(fetchCategoryCounts, 30000);
-    const userInterval = setInterval(fetchUser, 30000);
+    // Refresh setiap 15 detik
+    const interval = setInterval(fetchTotalReports, 15000);
     
+    // Listen untuk refresh dari komponen lain
     const handleRefresh = () => {
-      fetchStats();
-      fetchCategoryCounts();
+      console.log('Refresh triggered from event');
+      fetchTotalReports();
       fetchUser();
     };
     
-    window.addEventListener('refreshSidebarStats', handleRefresh);
+    window.addEventListener('refreshAllReportStats', handleRefresh);
     
     return () => {
-      clearInterval(statsInterval);
-      clearInterval(categoryInterval);
-      clearInterval(userInterval);
-      window.removeEventListener('refreshSidebarStats', handleRefresh);
+      clearInterval(interval);
+      window.removeEventListener('refreshAllReportStats', handleRefresh);
     };
   }, []);
 
-  // Format number dengan K untuk ribuan
+  // Format number (1247 -> 1.2K)
   const formattedTotal = totalReports >= 1000 
     ? `${(totalReports / 1000).toFixed(1)}K` 
     : totalReports.toString();
 
-  // Hitung XP progress (asumsi 100 XP per level)
+  // Hitung XP progress
   const currentLevelXP = user ? (user.level - 1) * 100 : 0;
   const nextLevelXP = user ? user.level * 100 : 100;
   const xpProgress = user ? ((user.xp - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100 : 0;
@@ -339,8 +309,6 @@ export function Sidebar() {
     );
   }
 
-  const isActive = (href: string) => pathname === href;
-
   return (
     <aside className="w-[260px] shrink-0 bg-[#0C1220] border-r border-[rgba(200,169,110,0.15)] flex flex-col fixed top-0 bottom-0 left-0 z-50 overflow-y-auto">
       {/* Logo */}
@@ -361,38 +329,18 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-4 py-5">
         <NavGroupLabel>Main</NavGroupLabel>
-        <NavItem 
-          href="/UserHoyo/dashboard" 
-          icon={<GridIcon />} 
-          label="Dashboard" 
-        />
+        <NavItem href="/UserHoyo/dashboard" icon={<GridIcon />} label="Dashboard" />
         <NavItem 
           href="/UserHoyo/all-report" 
           icon={<HexIcon />} 
           label="All Reports" 
-          badge={formattedTotal || "0"}
+          badge={formattedTotal || "0"} 
         />
 
         <NavGroupLabel>Category</NavGroupLabel>
-        <NavItem 
-          href="/UserHoyo/mission&quest" 
-          icon={<HexDotIcon />} 
-          label="Mission & Quest" 
-          badge={categoryCounts.guide.toString()}
-        />
-        <NavItem 
-          href="/UserHoyo/event" 
-          icon={<CalendarIcon />} 
-          label="Event Seasonal" 
-          badge={categoryCounts.event.toString()}
-          isNew={categoryCounts.event > 0}
-        />
-        <NavItem 
-          href="/UserHoyo/puzzle" 
-          icon={<DiamondIcon />} 
-          label="Puzzle & Riddles" 
-          badge={categoryCounts.puzzle.toString()}
-        />
+        <NavItem href="/UserHoyo/mission&quest" icon={<HexDotIcon />} label="Mission & Quest" badge="482" />
+        <NavItem href="/UserHoyo/event" icon={<CalendarIcon />} label="Event Seasonal" isNew />
+        <NavItem href="/UserHoyo/puzzle" icon={<DiamondIcon />} label="Puzzle & Riddles" badge="324" />
 
         <NavGroupLabel>Community</NavGroupLabel>
         <NavItem href="/UserHoyo/discussion" icon={<UsersIcon />} label="Discussion" />
@@ -401,7 +349,7 @@ export function Sidebar() {
         <NavItem href="/UserHoyo/settings" icon={<InfoIcon />} label="Settings" />
       </nav>
 
-      {/* User Footer - Menampilkan data user yang login */}
+      {/* User Footer */}
       <div className="px-5 py-5 border-t border-[rgba(200,169,110,0.15)]">
         <Link href="/UserHoyo/profile" className="flex items-center gap-[10px] no-underline group">
           <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0">
@@ -412,9 +360,8 @@ export function Sidebar() {
               {user?.username || 'Trailblazer'}
             </div>
             <div className="text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">
-              LV.{user?.level || 1} · {totalReports || 0} reports
+              LV.{user?.level || 1} · {user?.totalReports || 0} reports
             </div>
-            {/* XP Progress Bar */}
             <div className="mt-1 h-[2px] bg-[rgba(200,169,110,0.1)] rounded-full overflow-hidden">
               <div 
                 className="h-full bg-gradient-to-r from-[#C8A96E] to-[#EDD28A] transition-all duration-300"
@@ -426,7 +373,7 @@ export function Sidebar() {
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space_Mono&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space+Mono&display=swap');
       `}</style>
     </aside>
   );

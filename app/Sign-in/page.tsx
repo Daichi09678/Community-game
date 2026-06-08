@@ -27,6 +27,7 @@ export default function SignIn() {
   const [otp, setOtp]               = useState<string[]>(['','','','','','']);
   const [otpError, setOtpError]     = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [emailForOTP, setEmailForOTP] = useState('');
 
   // ── Login submit ──────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,33 +48,18 @@ export default function SignIn() {
       if (result.error) {
         setLoginError(result.error);
       } else if (result.success) {
-        // 🔥 SIMPAN USER ID KE LOCALSTORAGE
-        // Ambil user data dari response atau dari endpoint /me
-        const userResponse = await fetch('/api/auth/me', {
-          credentials: 'include'
-        });
-        
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          localStorage.setItem('user', JSON.stringify({
-            id: userData.id,
-            username: userData.username,
-            email: userData.email,
-            rank: userData.rank || 'Novice Omni-Voyager',
-            level: userData.level || 1,
-            xp: userData.xp || 0,
-            initials: userData.initials || (userData.username?.slice(0, 2).toUpperCase() || 'TB'),
-            totalReports: userData.totalReports || 0
-          }));
-          console.log('User data saved to localStorage:', userData.username);
-        }
-        
-        // Berhasil login → tampilkan step verifikasi OTP
+        setEmailForOTP(email);
         setStep('verify');
         startResendCooldown();
         setTimeout(() => {
           document.getElementById('otp-0')?.focus();
         }, 100);
+        
+        // Auto-fill OTP untuk development
+        if (result.devOTP && process.env.NODE_ENV === 'development') {
+          const devOtpDigits = result.devOTP.split('');
+          setOtp(devOtpDigits.concat(Array(6 - devOtpDigits.length).fill('')));
+        }
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -143,7 +129,7 @@ export default function SignIn() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email: emailForOTP, code }),
       });
       
       const result = await response.json();
@@ -153,27 +139,32 @@ export default function SignIn() {
         setOtp(['','','','','','']);
         document.getElementById('otp-0')?.focus();
       } else if (result.success) {
-        // 🔥 Update user data lagi setelah verify
-        const userResponse = await fetch('/api/auth/me', {
-          credentials: 'include'
-        });
-        
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
+        // Save user to localStorage
+        if (result.user) {
           localStorage.setItem('user', JSON.stringify({
-            id: userData.id,
-            username: userData.username,
-            email: userData.email,
-            rank: userData.rank || 'Novice Omni-Voyager',
-            level: userData.level || 1,
-            xp: userData.xp || 0,
-            initials: userData.initials || (userData.username?.slice(0, 2).toUpperCase() || 'TB'),
-            totalReports: userData.totalReports || 0
+            id: result.user.id,
+            username: result.user.username,
+            email: result.user.email,
+            rank: result.user.rank || 'Novice Omni-Voyager',
+            level: result.user.level || 1,
+            xp: result.user.xp || 0,
+            initials: result.user.username?.slice(0, 2).toUpperCase() || 'TB',
+            totalReports: result.user.totalReports || 0,
+            role: result.user.role || 'user'
           }));
+          console.log('✅ User saved to localStorage:', result.user.username);
+          console.log('👤 User role:', result.user.role);
         }
         
-        // Redirect ke dashboard
-        window.location.href = '/UserHoyo/dashboard';
+        // Trigger sidebar refresh
+        window.dispatchEvent(new CustomEvent('refreshSidebarStats'));
+        
+        // 🔥 REDIRECT BERDASARKAN ROLE
+        if (result.role === 'admin') {
+          window.location.href = '/HoyoAdmin/dashboard-admin';
+        } else {
+          window.location.href = '/UserHoyo/dashboard';
+        }
       }
     } catch (err) {
       console.error('OTP error:', err);
@@ -192,7 +183,7 @@ export default function SignIn() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: emailForOTP }),
       });
       
       const result = await response.json();
@@ -216,8 +207,8 @@ export default function SignIn() {
   const shadowColor = (field: string) =>
     focusField === field ? '0 0 0 2px rgba(200,169,110,.1)' : 'none';
 
-  const maskedEmail = email
-    ? email.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + '*'.repeat(Math.min(b.length, 4)) + c)
+  const maskedEmail = emailForOTP
+    ? emailForOTP.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + '*'.repeat(Math.min(b.length, 4)) + c)
     : 'your email';
 
   return (
@@ -316,18 +307,6 @@ export default function SignIn() {
 
         .divider{display:flex;align-items:center;gap:.75rem;margin:1.5rem 0}
         .divider::before,.divider::after{content:'';flex:1;height:.5px;background:rgba(200,169,110,.1)}
-
-        .social-btn{
-          display:flex;align-items:center;justify-content:center;gap:.6rem;
-          width:100%;padding:.7rem 1rem;background:rgba(200,169,110,.05);
-          border:.5px solid rgba(200,169,110,.14);color:#8A8070;
-          font-family:'Rajdhani',sans-serif;font-size:.8rem;font-weight:700;
-          letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
-          transition:background .2s,border-color .2s,color .2s,transform .15s;
-          clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%);
-        }
-        .social-btn:hover{background:rgba(200,169,110,.1);border-color:rgba(200,169,110,.3);color:#C8A96E}
-        .social-btn:active{transform:scale(.97)}
 
         .submit-btn{
           width:100%;padding:.85rem;
@@ -568,22 +547,6 @@ export default function SignIn() {
                         </button>
                       </div>
                     </form>
-
-                    <div className="fade-up fade-up-5 divider">
-                      <span style={{fontSize:'.62rem',fontWeight:700,letterSpacing:'.14em',textTransform:'uppercase',color:'#3A3530'}}>or continue with</span>
-                    </div>
-
-                    <div className="fade-up fade-up-5" style={{marginBottom:'1.75rem'}}>
-                      <button className="social-btn">
-                        <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
-                          <path d="M18.17 10.2c0-.65-.06-1.27-.16-1.87H10v3.54h4.59a3.93 3.93 0 01-1.7 2.58v2.14h2.75c1.61-1.48 2.53-3.66 2.53-6.4z" fill="#4285F4"/>
-                          <path d="M10 18.5c2.3 0 4.22-.76 5.63-2.06l-2.75-2.14c-.76.51-1.73.81-2.88.81-2.21 0-4.09-1.5-4.76-3.5H2.4v2.21A8.5 8.5 0 0010 18.5z" fill="#34A853"/>
-                          <path d="M5.24 11.61A5.1 5.1 0 015.24 8.4V6.19H2.4A8.5 8.5 0 002.4 13.8l2.84-2.19z" fill="#FBBC05"/>
-                          <path d="M10 4.5c1.24 0 2.36.43 3.24 1.27l2.43-2.43A8.5 8.5 0 002.4 6.19l2.84 2.21C5.91 6 7.79 4.5 10 4.5z" fill="#EA4335"/>
-                        </svg>
-                        Google
-                      </button>
-                    </div>
 
                     <div className="fade-up fade-up-6" style={{textAlign:'center',paddingTop:'1.25rem',borderTop:'.5px solid rgba(200,169,110,.08)'}}>
                       <span style={{fontSize:'.78rem',color:'#4A4540',fontWeight:600}}>New to the Express? </span>

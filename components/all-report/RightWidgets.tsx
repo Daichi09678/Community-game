@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { clipBadge, clipWidget } from '@/components/common/clipStyles';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { clipBadge, clipWidget } from '@/components/utils/styles';
+import { WidgetTitle } from '@/components/common';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -10,7 +12,6 @@ interface TopReport {
   id: number;
   title: string;
   score: number;
-  author: string;
   rankStyle: string;
 }
 
@@ -32,152 +33,210 @@ interface GameCoverage {
   fill: string;
 }
 
-const rankStyles = ['text-[#C8A96E]', 'text-[#C8A96E]', 'text-[#9AA0AA]', 'text-[#9AA0AA]', 'text-[#CD7F32]'];
+interface RightWidgetsProps {
+  accentColor?: string;
+  topReports?: TopReport[];
+  tags?: TrendingTag[];
+  activity?: ActivityData;
+  coverage?: GameCoverage[];
+  loading?: boolean;
+  onTagClick?: (tag: string) => void;
+}
 
-const tagVariantClass: Record<string, string> = {
-  default: 'bg-[rgba(200,169,110,0.08)] border-[rgba(200,169,110,0.2)] text-[#C8A96E] hover:bg-[rgba(200,169,110,0.15)]',
-  gold:    'bg-[rgba(200,169,110,0.12)] border-[rgba(200,169,110,0.3)] text-[#F0D080] hover:bg-[rgba(200,169,110,0.2)]',
-  cyan:    'bg-[rgba(78,205,196,0.08)] border-[rgba(78,205,196,0.2)] text-[#4ECDC4] hover:bg-[rgba(78,205,196,0.15)]',
-  purple:  'bg-[rgba(168,85,247,0.08)] border-[rgba(168,85,247,0.2)] text-[#A855F7] hover:bg-[rgba(168,85,247,0.15)]',
-};
+const defaultTopReports: TopReport[] = [
+  { id: 1, title: 'Penacony Dreamscape Guide', score: 1247, rankStyle: 'text-[#C8A96E]' },
+  { id: 2, title: 'Arlecchino Boss Fight', score: 892, rankStyle: 'text-[#B0B8C4]' },
+  { id: 3, title: 'Hollow Zero Guide', score: 756, rankStyle: 'text-[#CD7F32]' },
+  { id: 4, title: 'Memory Bubble Locations', score: 521, rankStyle: 'text-[#5A5248]' },
+  { id: 5, title: 'Neuvillette Best Build', score: 498, rankStyle: 'text-[#5A5248]' },
+];
 
-export function RightWidgets() {
-  const [mounted, setMounted] = useState(false);
-  const [topReports, setTopReports] = useState<TopReport[]>([]);
-  const [trendingTags, setTrendingTags] = useState<TrendingTag[]>([]);
-  const [activityData, setActivityData] = useState<ActivityData | null>(null);
-  const [gameCoverage, setGameCoverage] = useState<GameCoverage[]>([]);
-  const [loading, setLoading] = useState(true);
+const defaultTags: TrendingTag[] = [
+  { label: '#Guide', variant: 'default', count: 7 },
+  { label: '#Arlecchino', variant: 'gold', count: 1 },
+  { label: '#BossFight', variant: 'default', count: 1 },
+  { label: '#Build', variant: 'default', count: 1 },
+  { label: '#Endgame', variant: 'default', count: 1 },
+  { label: '#Event', variant: 'cyan', count: 1 },
+  { label: '#Exploration', variant: 'gold', count: 1 },
+  { label: '#HollowZero', variant: 'purple', count: 1 },
+  { label: '#MemoryBubble', variant: 'default', count: 1 },
+  { label: '#Neuvillette', variant: 'default', count: 1 },
+];
 
+export function RightWidgets({ 
+  accentColor = '#C8A96E', 
+  topReports: propTopReports,
+  tags: propTags,
+  activity: propActivity,
+  coverage: propCoverage,
+  loading: propLoading = false,
+  onTagClick
+}: RightWidgetsProps) {
+  const router = useRouter();
+  const [topReports, setTopReports] = useState<TopReport[]>(propTopReports || defaultTopReports);
+  const [tags, setTags] = useState<TrendingTag[]>(propTags || defaultTags);
+  const [activity, setActivity] = useState<ActivityData | null>(null);
+  const [coverage, setCoverage] = useState<GameCoverage[]>(propCoverage || []);
+  const [loading, setLoading] = useState(propLoading);
+
+  // Fetch data from API jika tidak ada props
   useEffect(() => {
-    setMounted(true);
-    fetchAllWidgetData();
-  }, []);
+    if (propTopReports && propTags && propActivity && propCoverage) {
+      setActivity(propActivity);
+      setCoverage(propCoverage);
+      return;
+    }
 
-  const fetchAllWidgetData = async () => {
-    setLoading(true);
-    try {
-      // Fetch Top Reports
-      const topRes = await fetch(`${API_BASE_URL}/api/dashboard/top-reports`);
-      if (topRes.ok) {
-        const topData = await topRes.json();
-        if (topData.success && topData.data) {
-          setTopReports(topData.data);
-        } else {
-          // Fallback data
-          setTopReports([
-            { id: 1, title: 'Penacony Dreamscape Guide', score: 1247, author: 'Trailblazer', rankStyle: 'text-[#C8A96E]' },
-            { id: 2, title: 'Arlecchino Boss Fight', score: 892, author: 'Traveler', rankStyle: 'text-[#C8A96E]' },
-            { id: 3, title: 'Hollow Zero Guide', score: 756, author: 'Proxy', rankStyle: 'text-[#9AA0AA]' },
-            { id: 4, title: 'Chasca Hangout Quest', score: 521, author: 'GenshinPlayer', rankStyle: 'text-[#9AA0AA]' },
-            { id: 5, title: 'Elysian Realm Guide', score: 498, author: 'Captain', rankStyle: 'text-[#CD7F32]' },
-          ]);
+    const fetchWidgetData = async () => {
+      setLoading(true);
+      try {
+        // Fetch Top Reports
+        if (!propTopReports) {
+          const topRes = await fetch(`${API_BASE_URL}/api/dashboard/top-reports`);
+          if (topRes.ok) {
+            const topData = await topRes.json();
+            if (topData.success && topData.data && topData.data.length > 0) {
+              const formattedReports = topData.data.map((item: any, index: number) => ({
+                id: item.id || index + 1,
+                title: item.title,
+                score: item.score || 0,
+                rankStyle: ['text-[#C8A96E]', 'text-[#B0B8C4]', 'text-[#CD7F32]', 'text-[#5A5248]', 'text-[#5A5248]'][index] || 'text-[#5A5248]',
+              }));
+              setTopReports(formattedReports);
+            }
+          }
         }
-      }
 
-      // Fetch Trending Tags
-      const tagsRes = await fetch(`${API_BASE_URL}/api/dashboard/trending-tags`);
-      if (tagsRes.ok) {
-        const tagsData = await tagsRes.json();
-        if (tagsData.success && tagsData.data) {
-          setTrendingTags(tagsData.data);
-        } else {
-          setTrendingTags([
-            { label: '#Exploration', variant: 'gold', count: 234 },
-            { label: '#Lore', variant: 'cyan', count: 189 },
-            { label: '#Build', variant: 'default', count: 156 },
-            { label: '#Guide', variant: 'default', count: 142 },
-            { label: '#Achievement', variant: 'gold', count: 128 },
-            { label: '#Secret', variant: 'purple', count: 97 },
-            { label: '#BossFight', variant: 'default', count: 86 },
-            { label: '#EventExclusive', variant: 'cyan', count: 72 },
-          ]);
+        // Fetch Trending Tags
+        if (!propTags) {
+          const tagsRes = await fetch(`${API_BASE_URL}/api/dashboard/trending-tags`);
+          if (tagsRes.ok) {
+            const tagsData = await tagsRes.json();
+            if (tagsData.success && tagsData.data && tagsData.data.length > 0) {
+              setTags(tagsData.data);
+            }
+          }
         }
-      }
 
-      // Fetch Activity Data
-      const activityRes = await fetch(`${API_BASE_URL}/api/dashboard/activity`);
-      if (activityRes.ok) {
-        const activity = await activityRes.json();
-        if (activity.success && activity.data) {
-          setActivityData(activity.data);
+        // Fetch Activity Data
+        if (!propActivity) {
+          const activityRes = await fetch(`${API_BASE_URL}/api/dashboard/activity`);
+          if (activityRes.ok) {
+            const activityData = await activityRes.json();
+            if (activityData.success && activityData.data) {
+              setActivity(activityData.data);
+            }
+          }
         }
-      }
 
-      // Fetch Game Coverage
-      const coverageRes = await fetch(`${API_BASE_URL}/api/dashboard/game-coverage`);
-      if (coverageRes.ok) {
-        const coverage = await coverageRes.json();
-        if (coverage.success && coverage.data) {
-          setGameCoverage(coverage.data);
+        // Fetch Game Coverage
+        if (!propCoverage) {
+          const coverageRes = await fetch(`${API_BASE_URL}/api/dashboard/game-coverage`);
+          if (coverageRes.ok) {
+            const coverageData = await coverageRes.json();
+            if (coverageData.success && coverageData.data) {
+              setCoverage(coverageData.data);
+            }
+          }
         }
+      } catch (error) {
+        console.error('Error fetching widget data:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching widget data:', error);
-    } finally {
+    };
+
+    if (!propTopReports || !propTags || !propActivity || !propCoverage) {
+      fetchWidgetData();
+    } else {
       setLoading(false);
+    }
+  }, [propTopReports, propTags, propActivity, propCoverage]);
+
+  const tagVariant: Record<string, string> = {
+    default: 'bg-[rgba(200,169,110,0.08)] border-[rgba(200,169,110,0.2)] text-[#C8A96E] hover:bg-[rgba(200,169,110,0.15)]',
+    gold: 'bg-[rgba(200,169,110,0.12)] border-[rgba(200,169,110,0.3)] text-[#F0D080] hover:bg-[rgba(200,169,110,0.2)]',
+    cyan: 'bg-[rgba(78,205,196,0.08)] border-[rgba(78,205,196,0.2)] text-[#4ECDC4] hover:bg-[rgba(78,205,196,0.15)]',
+    purple: 'bg-[rgba(168,85,247,0.08)] border-[rgba(168,85,247,0.2)] text-[#A855F7] hover:bg-[rgba(168,85,247,0.15)]',
+  };
+
+  const rankStyles = ['text-[#C8A96E]', 'text-[#B0B8C4]', 'text-[#CD7F32]', 'text-[#5A5248]', 'text-[#5A5248]'];
+
+  const handleTagClick = (tagLabel: string) => {
+    const tagName = tagLabel.replace('#', '');
+    if (onTagClick) {
+      onTagClick(tagName);
+    } else {
+      router.push(`/UserHoyo/dashboard/trending-tags?tag=${encodeURIComponent(tagName)}`);
     }
   };
 
-  const displayActivity = activityData || { 
-    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], 
-    vals: [0, 0, 0, 0, 0, 0, 0], 
-    maxVal: 1 
+  const handleViewAll = () => {
+    router.push('/UserHoyo/dashboard/trending-tags');
   };
-  
-  const displayCoverage = gameCoverage.length > 0 ? gameCoverage : [
-    { label: 'Honkai: Star Rail', pct: 45, fill: 'bg-[#4ECDC4]' },
-    { label: 'Genshin Impact', pct: 30, fill: 'bg-[#6DD18A]' },
-    { label: 'Zenless Zone Zero', pct: 15, fill: 'bg-[#A855F7]' },
-    { label: 'Honkai Impact 3rd', pct: 10, fill: 'bg-[#E05C7A]' },
-  ];
 
-  if (loading && mounted) {
+  const isLoading = loading || propLoading;
+
+  if (isLoading) {
     return (
       <div>
-        <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-6 mb-5" style={clipWidget}>
+        <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
           <div className="animate-pulse text-[#5A5248] text-center">Loading widgets...</div>
         </div>
       </div>
     );
   }
 
+  const displayActivity = activity || { 
+    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], 
+    vals: [42, 38, 45, 52, 48, 67, 58], 
+    maxVal: 67 
+  };
+  const todayIndex = displayActivity.days.length - 1;
+
   return (
     <div>
-      {/* Top Reports */}
+      {/* Top Reports - WITH LINK TO DETAIL REPORT */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
-        <div className="font-['Cinzel',serif] text-[0.82rem] font-semibold text-[#E8E0CC] mb-4 flex items-center gap-2">
-          <span className="w-[3px] h-[14px] bg-[#C8A96E] inline-block" />
-          Top Reports
-        </div>
+        <WidgetTitle>Top Reports</WidgetTitle>
         {topReports.slice(0, 5).map((item, i) => (
-          <div key={item.id || i} className="flex items-center gap-[10px] py-2 border-b border-[rgba(200,169,110,0.06)] last:border-b-0 last:pb-0">
-            <span className={`font-['Space_Mono',monospace] text-[0.72rem] min-w-[20px] ${rankStyles[i] || 'text-[#5A5248]'}`}>#{i + 1}</span>
+          <div key={i} className="flex items-center gap-[10px] py-2 border-b border-[rgba(200,169,110,0.06)] last:border-b-0 last:pb-0 group">
+            <span className={`font-['Space_Mono',monospace] text-[0.7rem] min-w-[20px] ${rankStyles[i]}`}>#{i + 1}</span>
             <Link 
-              href={`/UserHoyo/report/${item.id}`}
-              className="flex-1 text-[0.82rem] text-[#9A8F78] cursor-pointer transition-colors duration-200 hover:text-[#E8E0CC] leading-[1.3] no-underline"
+              href={`/UserHoyo/report/${item.id}`} 
+              className="flex-1 text-[0.78rem] text-[#9A8F78] cursor-pointer transition-colors duration-200 hover:text-[#E8E0CC] leading-[1.3] line-clamp-1 no-underline"
             >
               {item.title}
             </Link>
-            <span className="font-['Space_Mono',monospace] text-[0.7rem] text-[#4ECDC4]">{item.score.toLocaleString()} votes</span>
+            <span className="font-['Space_Mono',monospace] text-[0.65rem] text-[#4ECDC4] whitespace-nowrap">
+              {item.score.toLocaleString()} votes
+            </span>
           </div>
         ))}
       </div>
 
-      {/* Trending Tags */}
+      {/* Trending Tags Widget */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
-        <div className="font-['Cinzel',serif] text-[0.82rem] font-semibold text-[#E8E0CC] mb-4 flex items-center gap-2">
-          <span className="w-[3px] h-[14px] bg-[#C8A96E] inline-block" />
-          Trending Tags
+        <div className="flex items-center justify-between mb-3">
+          <WidgetTitle>Trending Tags</WidgetTitle>
+          <button 
+            onClick={handleViewAll}
+            className="text-[0.6rem] text-[#C8A96E] font-['Space_Mono',monospace] hover:text-[#EDD28A] transition-colors cursor-pointer bg-transparent border-none"
+          >
+            View all →
+          </button>
         </div>
-        <div className="-mt-1">
-          {trendingTags.slice(0, 10).map((tag, i) => (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.slice(0, 10).map((tag, i) => (
             <span
               key={i}
               style={clipBadge}
-              className={`inline-block px-[10px] py-[3px] border text-[0.7rem] font-semibold m-[3px] cursor-pointer transition-all duration-200 ${tagVariantClass[tag.variant]}`}
+              onClick={() => handleTagClick(tag.label)}
+              className={`inline-flex items-center gap-1 px-[8px] py-[2px] border text-[0.65rem] font-medium cursor-pointer transition-all duration-200 ${tagVariant[tag.variant] || tagVariant.default} hover:scale-105`}
             >
-              {tag.label} ({tag.count})
+              {tag.label}
+              <span className="text-[0.55rem] text-[#5A5248]">({tag.count})</span>
             </span>
           ))}
         </div>
@@ -185,53 +244,65 @@ export function RightWidgets() {
 
       {/* Activity Chart */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
-        <div className="font-['Cinzel',serif] text-[0.82rem] font-semibold text-[#E8E0CC] mb-4 flex items-center gap-2">
-          <span className="w-[3px] h-[14px] bg-[#C8A96E] inline-block" />
-          Activity This Week
+        <div className="flex items-center justify-between mb-4">
+          <WidgetTitle>Activity This Week</WidgetTitle>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#4ECDC4] animate-pulse" />
+            <span className="text-[0.55rem] text-[#4ECDC4] font-['Space_Mono',monospace]">Live</span>
+          </div>
         </div>
-        <div className="flex items-end gap-[6px] h-20">
+        
+        <div className="flex items-end gap-1 h-20">
           {displayActivity.days.map((day, i) => {
             const barHeight = displayActivity.maxVal > 0 
-              ? Math.max(8, (displayActivity.vals[i] / displayActivity.maxVal) * 52)
-              : 8;
-            const isToday = i === displayActivity.days.length - 1;
+              ? Math.max(6, (displayActivity.vals[i] / displayActivity.maxVal) * 60)
+              : 6;
+            const isToday = i === todayIndex;
+            const barColor = isToday ? accentColor : 'rgba(200,169,110,0.35)';
+            
             return (
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <div
                   className="w-full max-w-[28px] rounded-t transition-all duration-300"
                   style={{
-                    height: mounted ? `${barHeight}px` : '30px',
-                    background: isToday ? '#C8A96E' : 'rgba(200,169,110,0.25)',
+                    height: `${barHeight}px`,
+                    background: `linear-gradient(180deg, ${barColor}, ${barColor}80)`,
+                    borderRadius: '2px 2px 0 0',
                   }}
                 />
-                <span className="text-[0.55rem] text-[#5A5248] font-['Space_Mono',monospace]">{day}</span>
+                <span className={`text-[0.5rem] font-['Space_Mono',monospace] ${isToday ? 'text-[#C8A96E]' : 'text-[#5A5248]'}`}>
+                  {day}
+                </span>
               </div>
             );
           })}
         </div>
+        
+        <div className="text-right mt-3 text-[0.55rem] text-[#5A5248] font-['Space_Mono',monospace]">
+          {displayActivity.vals.reduce((a, b) => a + b, 0)} total activities
+        </div>
       </div>
 
       {/* Game Coverage */}
-      <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
-        <div className="font-['Cinzel',serif] text-[0.82rem] font-semibold text-[#E8E0CC] mb-4 flex items-center gap-2">
-          <span className="w-[3px] h-[14px] bg-[#C8A96E] inline-block" />
-          Game Coverage
+      {coverage.length > 0 && (
+        <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
+          <WidgetTitle>Game Coverage</WidgetTitle>
+          {coverage.map((g, i) => (
+            <div key={i} className="mb-3 last:mb-0">
+              <div className="flex justify-between mb-1">
+                <span className="text-[0.7rem] text-[#9A8F78]">{g.label}</span>
+                <span className="text-[0.65rem] font-['Space_Mono',monospace] text-[#5A5248]">{g.pct}%</span>
+              </div>
+              <div className="h-1 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${g.fill} transition-[width] duration-[600ms] ease-in-out rounded-full`} 
+                  style={{ width: `${g.pct}%` }} 
+                />
+              </div>
+            </div>
+          ))}
         </div>
-        {displayCoverage.map((g, i) => (
-          <div key={i} className="mb-3 last:mb-0">
-            <div className="flex justify-between mb-1">
-              <span className="text-[0.7rem] text-[#9A8F78]">{g.label}</span>
-              <span className="text-[0.65rem] font-['Space_Mono',monospace] text-[#5A5248]">{g.pct}%</span>
-            </div>
-            <div className="h-1 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden">
-              <div 
-                className={`h-full ${g.fill} transition-all duration-[600ms] ease-in-out rounded-full`} 
-                style={{ width: mounted ? `${g.pct}%` : '0%' }} 
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+      )}
     </div>
   );
 }
