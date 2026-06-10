@@ -7,5 +7,9 @@ export const pool = mysql.createPool({
   database: process.env.DB_NAME || 'trailblazer_db',
   port: Number(process.env.DB_PORT) || 3306,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 15, // Naikkan sedikit
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  idleTimeout: 60000, // 60 detik - lepas koneksi idle
 });

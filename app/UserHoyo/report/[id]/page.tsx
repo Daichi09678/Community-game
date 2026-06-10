@@ -25,17 +25,12 @@ const CATEGORY_MAP: Record<string, { label: string; icon: string }> = {
   build:  { label: 'Build',  icon: '⚔️' },
 };
 
-const SEVERITY_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  low:      { label: 'Low',      color: '#6DD18A', bg: 'rgba(109,209,138,0.08)' },
-  medium:   { label: 'Medium',   color: '#C8A96E', bg: 'rgba(200,169,110,0.08)' },
-  high:     { label: 'High',     color: '#E05C7A', bg: 'rgba(224,92,122,0.08)'  },
-  critical: { label: 'Critical', color: '#FF3B5C', bg: 'rgba(255,59,92,0.08)'   },
-};
-
+// Status map untuk menampilkan badge yang sesuai
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  published: { label: 'Published', color: '#6DD18A', bg: 'rgba(109,209,138,0.08)' },
-  draft:     { label: 'Draft',     color: '#C8A96E', bg: 'rgba(200,169,110,0.08)' },
-  archived:  { label: 'Archived',  color: '#E05C7A', bg: 'rgba(224,92,122,0.08)'  },
+  published: { label: 'APPROVED', color: '#6DD18A', bg: 'rgba(109,209,138,0.08)' },
+  draft:     { label: 'DRAFT',    color: '#C8A96E', bg: 'rgba(200,169,110,0.08)' },
+  archived:  { label: 'REJECTED', color: '#E05C7A', bg: 'rgba(224,92,122,0.08)'  },
+  pending:   { label: 'PENDING',  color: '#C8A96E', bg: 'rgba(200,169,110,0.08)'  },
 };
 
 interface Report {
@@ -44,7 +39,7 @@ interface Report {
   type: string;
   game: string;
   content: string;
-  severity: string;
+  severity?: string;
   status: string;
   version: string;
   tags: string[];
@@ -54,6 +49,7 @@ interface Report {
   username?: string;
   views?: number;
   votes?: number;
+  authorName?: string;
 }
 
 const BackIcon = () => (
@@ -75,7 +71,7 @@ export default function ReportDetailPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [me, setMe] = useState<{ id: string } | null>(null);
+  const [me, setMe] = useState<{ id: string; role?: string } | null>(null);
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
 
@@ -86,63 +82,68 @@ export default function ReportDetailPage() {
     } catch {}
   }, []);
 
+  const fetchReport = async () => {
+    if (!id) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      console.log('🔍 Fetching report ID:', id);
+      
+      const res = await fetch(`${API_BASE_URL}/api/dashboard/reports/${id}`, {
+        credentials: 'include'
+      });
+      
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Report not found');
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+      console.log('📦 Response data:', data);
+      
+      let reportData;
+      if (data.success && data.report) {
+        reportData = data.report;
+      } else if (data.report) {
+        reportData = data.report;
+      } else if (data.id) {
+        reportData = data;
+      } else {
+        throw new Error('Invalid response format');
+      }
+      
+      setReport(reportData);
+      setLikesCount(reportData.votes || 0);
+      
+      // Record view
+      fetch(`${API_BASE_URL}/api/dashboard/reports/${id}/view`, {
+        method: 'POST',
+        credentials: 'include',
+      }).catch(err => console.error('Error recording view:', err));
+      
+    } catch (err) {
+      console.error('❌ Fetch error:', err);
+      setError(err instanceof Error ? err.message : 'Report not found.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReport();
+  }, [id]);
+
+  // Auto refresh setiap 30 detik untuk cek status update dari admin
   useEffect(() => {
     if (!id) return;
-
-    const fetchReport = async () => {
-      setLoading(true);
-      setError('');
-      
-      try {
-        console.log('🔍 Fetching report ID:', id);
-        console.log('🔗 URL:', `${API_BASE_URL}/api/dashboard/reports/${id}`);
-        
-        const res = await fetch(`${API_BASE_URL}/api/dashboard/reports/${id}`, {
-          credentials: 'include'
-        });
-        
-        console.log('📡 Response status:', res.status);
-        
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new Error('Report not found');
-          }
-          throw new Error(`HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        console.log('📦 Response data:', data);
-        
-        // Handle response format
-        let reportData;
-        if (data.success && data.report) {
-          reportData = data.report;
-        } else if (data.report) {
-          reportData = data.report;
-        } else if (data.id) {
-          reportData = data;
-        } else {
-          throw new Error('Invalid response format');
-        }
-        
-        setReport(reportData);
-        setLikesCount(reportData.votes || 0);
-        
-        // Record view
-        fetch(`${API_BASE_URL}/api/dashboard/reports/${id}/view`, {
-          method: 'POST',
-          credentials: 'include',
-        }).catch(err => console.error('Error recording view:', err));
-        
-      } catch (err) {
-        console.error('❌ Fetch error:', err);
-        setError(err instanceof Error ? err.message : 'Report not found.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchReport();
+    
+    const interval = setInterval(() => {
+      fetchReport();
+    }, 30000); // Refresh setiap 30 detik
+    
+    return () => clearInterval(interval);
   }, [id]);
 
   const handleLike = async () => {
@@ -209,9 +210,26 @@ export default function ReportDetailPage() {
 
   const game = report ? GAME_MAP[report.game] : null;
   const category = report ? CATEGORY_MAP[report.type] : null;
-  const severity = report ? SEVERITY_MAP[report.severity] : null;
-  const status = report ? (STATUS_MAP[report.status] ?? STATUS_MAP.draft) : null;
+  const status = report ? (STATUS_MAP[report.status] ?? STATUS_MAP.pending) : null;
+  
+  // Cek apakah user adalah admin atau owner
   const isOwner = me && report && me.id === report.userId;
+  const isAdmin = me?.role === 'admin';
+
+  // Status message berdasarkan status report
+  const getStatusMessage = () => {
+    if (!report) return '';
+    switch (report.status) {
+      case 'published':
+        return '✓ This report has been approved and published.';
+      case 'archived':
+        return '✗ This report has been rejected and archived.';
+      case 'draft':
+        return '⏳ This report is still in draft and awaiting admin review.';
+      default:
+        return '⏳ This report is pending admin approval.';
+    }
+  };
 
   if (!loading && error) {
     return (
@@ -299,14 +317,6 @@ export default function ReportDetailPage() {
                     {category.icon} {category.label}
                   </span>
                 )}
-                {severity && (
-                  <span style={{ ...clipBadge, display: 'inline-flex', alignItems: 'center', gap: '4px',
-                    padding: '3px 10px', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
-                    textTransform: 'uppercase', fontFamily: "'Rajdhani',sans-serif",
-                    color: severity.color, background: severity.bg, border: `1px solid ${severity.color}30` }}>
-                    ◈ {severity.label}
-                  </span>
-                )}
                 {status && (
                   <span style={{ ...clipBadge, display: 'inline-flex', alignItems: 'center', gap: '5px',
                     padding: '3px 10px', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
@@ -326,10 +336,31 @@ export default function ReportDetailPage() {
               <Sk h="26px" /><Sk w="65%" h="26px" />
             </div>
           ) : (
-            <h1 style={{ fontFamily: "'Cinzel',serif", fontSize: '1.55rem', fontWeight: 700,
-              color: '#E8E0CC', lineHeight: 1.35, margin: '0 0 1rem 0' }}>
-              {report?.title}
-            </h1>
+            <>
+              <h1 style={{ fontFamily: "'Cinzel',serif", fontSize: '1.55rem', fontWeight: 700,
+                color: '#E8E0CC', lineHeight: 1.35, margin: '0 0 0.5rem 0' }}>
+                {report?.title}
+              </h1>
+              
+              {/* Status Message - Menampilkan informasi status dari admin */}
+              <div style={{ 
+                marginBottom: '1rem', 
+                padding: '8px 12px', 
+                borderRadius: '4px',
+                background: report?.status === 'published' ? 'rgba(109,209,138,0.08)' :
+                          report?.status === 'archived' ? 'rgba(224,92,122,0.08)' :
+                          'rgba(200,169,110,0.08)',
+                border: `1px solid ${report?.status === 'published' ? '#6DD18A30' :
+                         report?.status === 'archived' ? '#E05C7A30' :
+                         '#C8A96E30'}`,
+                fontSize: '0.75rem',
+                color: report?.status === 'published' ? '#6DD18A' :
+                       report?.status === 'archived' ? '#E05C7A' :
+                       '#C8A96E'
+              }}>
+                {getStatusMessage()}
+              </div>
+            </>
           )}
 
           {!loading && report?.tags && report.tags.length > 0 && (
@@ -353,7 +384,7 @@ export default function ReportDetailPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
             border: '1px solid rgba(200,169,110,0.1)', ...clipWidget, overflow: 'hidden' }}>
             {[
-              { label: 'Author',    val: report?.username || `User #${report?.userId?.slice(0,6)}` },
+              { label: 'Author',    val: report?.username || report?.authorName || `User #${report?.userId?.slice(0,6)}` },
               { label: 'Submitted', val: fmt(report?.createdAt || '') },
               { label: 'Version',   val: `v${report?.version || '1.0'}` },
             ].map((item, i) => (
@@ -439,7 +470,7 @@ export default function ReportDetailPage() {
               All Reports
             </Link>
 
-            {isOwner && !loading && (
+            {isOwner && !loading && report?.status === 'draft' && (
               <button onClick={handleDelete} style={{ ...clipHexSm, display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '8px 18px', border: '1px solid #E05C7A', color: '#E05C7A',
                 fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', textDecoration: 'none',
@@ -449,6 +480,11 @@ export default function ReportDetailPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* INFO: Status update otomatis */}
+        <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.65rem', color: '#3A3028', fontFamily: "'Space Mono',monospace" }}>
+          Page auto-refreshes every 30 seconds to show latest status
         </div>
       </main>
 

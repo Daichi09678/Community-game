@@ -23,11 +23,21 @@ const TrendUpIcon = () => (
 );
 
 export default function AdminStatCards({ stats }: AdminStatCardsProps) {
+  // ✅ FIX: Default values jika stats undefined atau property-nya undefined
+  const safeStats = {
+    totalUsers: stats?.totalUsers ?? 0,
+    activeToday: stats?.activeToday ?? 0,
+    totalReports: stats?.totalReports ?? 0,
+    pendingReports: stats?.pendingReports ?? 0,
+    totalComplaints: stats?.totalComplaints ?? 0,
+    bannedUsers: stats?.bannedUsers ?? 0,
+  };
+
   const cards = [
-    { label: 'Total Users', value: stats.totalUsers.toLocaleString(), change: '+12 this week', accent: '#C8A96E' },
-    { label: 'Active Today', value: stats.activeToday.toLocaleString(), change: 'Online now', accent: '#4ECDC4' },
-    { label: 'Total Reports', value: stats.totalReports.toLocaleString(), change: `${stats.pendingReports} pending review`, accent: '#A855F7' },
-    { label: 'Open Complaints', value: stats.totalComplaints.toLocaleString(), change: `${stats.bannedUsers} users banned`, accent: '#E05C7A' },
+    { label: 'Total Users', value: safeStats.totalUsers.toLocaleString(), change: '+12 this week', accent: '#C8A96E' },
+    { label: 'Active Today', value: safeStats.activeToday.toLocaleString(), change: 'Online now', accent: '#4ECDC4' },
+    { label: 'Total Reports', value: safeStats.totalReports.toLocaleString(), change: `${safeStats.pendingReports} pending review`, accent: '#A855F7' },
+    { label: 'Open Complaints', value: safeStats.totalComplaints.toLocaleString(), change: `${safeStats.bannedUsers} users banned`, accent: '#E05C7A' },
   ];
 
   return (

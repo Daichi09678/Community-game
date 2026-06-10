@@ -1,34 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { clipBadge, clipBtn } from '@/components/common/clipStyles';
 
 interface Report {
-  id: number;
+  id: string;
   title: string;
-  author: string;
+  authorName: string;
   game: string;
   type: string;
   votes: number;
   date: string;
-  status: 'live' | 'removed';
+  status: string;
+  createdAt: string;
 }
-
-const ALL_REPORTS: Report[] = [
-  { id: 1, title: 'Kafka Max Build — v2.5', author: 'StarRailCrafter', game: 'hsr', type: 'build', votes: 671, date: '2025-06-07', status: 'live' },
-  { id: 2, title: 'Penacony Dreamscape Full Guide', author: 'AetherVoyager', game: 'hsr', type: 'guide', votes: 342, date: '2025-06-06', status: 'live' },
-  { id: 3, title: 'Silver Wolf S1 Guide', author: 'StarRailCrafter', game: 'hsr', type: 'guide', votes: 430, date: '2025-06-03', status: 'live' },
-  { id: 4, title: 'Genshin Fontaine Puzzle Compendium', author: 'LunarWatcher', game: 'gi', type: 'puzzle', votes: 89, date: '2025-06-01', status: 'live' },
-  { id: 5, title: 'Memory of Chaos P12 Guide', author: 'StarRailCrafter', game: 'hsr', type: 'event', votes: 510, date: '2025-05-28', status: 'live' },
-  { id: 6, title: 'HI3 Elysian Realm Survival Tips', author: 'NightOwlGamer', game: 'hi3', type: 'guide', votes: 34, date: '2025-04-29', status: 'live' },
-  { id: 7, title: '[SPAM] Click here for primos', author: 'ZZZHackerX', game: 'zzz', type: 'guide', votes: -5, date: '2025-05-31', status: 'removed' },
-];
 
 const gameColor: Record<string, string> = {
   hsr: '#4ECDC4',
   gi: '#6DD18A',
   zzz: '#A855F7',
   hi3: '#E05C7A',
+  'honkai-star-rail': '#4ECDC4',
+  'genshin-impact': '#6DD18A',
+  'zenless-zone-zero': '#A855F7',
+  'honkai-impact-3rd': '#E05C7A',
 };
 
 const typeColor: Record<string, string> = {
@@ -36,16 +32,51 @@ const typeColor: Record<string, string> = {
   event: '#4ECDC4',
   puzzle: '#A855F7',
   build: '#6DD18A',
+  report: '#C8A96E',
+  bug: '#E05C7A',
+};
+
+// ✅ Status mapping untuk tampilan user-friendly
+const statusStyle: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  published: { label: 'Approved ✓', color: '#6DD18A', bg: 'rgba(109,209,138,0.08)', border: 'rgba(109,209,138,0.3)' },
+  pending: { label: 'Pending', color: '#C8A96E', bg: 'rgba(200,169,110,0.08)', border: 'rgba(200,169,110,0.3)' },
+  archived: { label: 'Rejected ✗', color: '#E05C7A', bg: 'rgba(224,92,122,0.08)', border: 'rgba(224,92,122,0.3)' },
+  draft: { label: 'Draft', color: '#5A5248', bg: 'rgba(90,82,72,0.08)', border: 'rgba(90,82,72,0.3)' },
 };
 
 export default function AllReportsPage() {
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [gameFilter, setGameFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const filteredReports = ALL_REPORTS.filter(report => {
-    const matchesSearch = report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          report.author.toLowerCase().includes(searchTerm.toLowerCase());
+  // Fetch reports from API
+  const fetchReports = async () => {
+    try {
+      const response = await fetch('/api/dashboard/reports', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.reports) {
+          setReports(data.reports);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const filteredReports = reports.filter(report => {
+    const matchesSearch = report.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          report.authorName?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesGame = gameFilter === 'all' || report.game === gameFilter;
     const matchesType = typeFilter === 'all' || report.type === typeFilter;
     return matchesSearch && matchesGame && matchesType;
@@ -66,6 +97,17 @@ export default function AllReportsPage() {
     { id: 'puzzle', label: 'Puzzle', color: '#A855F7' },
     { id: 'build', label: 'Build', color: '#6DD18A' },
   ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-[#C8A96E] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[#5A5248]">Loading reports...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -140,7 +182,7 @@ export default function AllReportsPage() {
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              {['#', 'Title', 'Author', 'Game', 'Type', 'Votes', 'Date', 'Status'].map(h => (
+              {['Title', 'Author', 'Game', 'Type', 'Votes', 'Date', 'Status', 'Action'].map(h => (
                 <th key={h} className="px-4 py-[10px] text-left text-[0.65rem] font-bold tracking-[0.15em] uppercase text-[#5A5248] border-b border-[rgba(200,169,110,0.15)] bg-[rgba(200,169,110,0.03)]">
                   {h}
                 </th>
@@ -148,53 +190,81 @@ export default function AllReportsPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredReports.map((report, i) => (
-              <tr key={report.id} className="hover:[&>td]:bg-[rgba(200,169,110,0.02)]">
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)] text-[#5A5248] font-['Space_Mono',monospace] text-[0.72rem]">{report.id}</td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
-                  <span className="text-[0.85rem] font-semibold text-[#E8E0CC]">{report.title}</span>
-                </td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)] text-[0.75rem] text-[#9A8F78]">{report.author}</td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
-                  <span
-                    className="text-[0.65rem] font-bold px-2 py-[2px] border uppercase"
-                    style={{ ...clipBadge, color: gameColor[report.game], borderColor: `${gameColor[report.game]}40`, background: `${gameColor[report.game]}10` }}
-                  >
-                    {report.game.toUpperCase()}
-                  </span>
-                </td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
-                  <span
-                    className="text-[0.65rem] font-bold px-2 py-[2px] border uppercase"
-                    style={{ ...clipBadge, color: typeColor[report.type], borderColor: `${typeColor[report.type]}40`, background: `${typeColor[report.type]}10` }}
-                  >
-                    {report.type}
-                  </span>
-                </td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
-                  <span className={`font-['Space_Mono',monospace] text-[0.75rem] ${report.votes < 0 ? 'text-[#E05C7A]' : 'text-[#4ECDC4]'}`}>
-                    {report.votes >= 0 ? '↑' : '↓'} {Math.abs(report.votes)}
-                  </span>
-                </td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)] text-[#5A5248] text-[0.72rem] font-['Space_Mono',monospace]">{report.date}</td>
-                <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
-                  <span
-                    className="text-[0.6rem] font-bold px-2 py-[2px] border uppercase"
-                    style={{
-                      ...clipBadge,
-                      color: report.status === 'live' ? '#4ECDC4' : '#E05C7A',
-                      borderColor: report.status === 'live' ? 'rgba(78,205,196,0.3)' : 'rgba(224,92,122,0.3)',
-                      background: report.status === 'live' ? 'rgba(78,205,196,0.08)' : 'rgba(224,92,122,0.08)',
-                    }}
-                  >
-                    {report.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {filteredReports.map((report) => {
+              const game = report.game?.toLowerCase() || '';
+              const type = report.type?.toLowerCase() || '';
+              const status = report.status || 'pending';
+              const s = statusStyle[status] || statusStyle.pending;
+              
+              return (
+                <tr key={report.id} className="hover:[&>td]:bg-[rgba(200,169,110,0.02)]">
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
+                    <span className="text-[0.85rem] font-semibold text-[#E8E0CC]">{report.title}</span>
+                  </td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)] text-[0.75rem] text-[#9A8F78]">{report.authorName || 'Anonymous'}</td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
+                    <span
+                      className="text-[0.65rem] font-bold px-2 py-[2px] border uppercase"
+                      style={{ ...clipBadge, color: gameColor[game] || '#C8A96E', borderColor: `${gameColor[game] || '#C8A96E'}40`, background: `${gameColor[game] || '#C8A96E'}10` }}
+                    >
+                      {game === 'hsr' ? 'STAR RAIL' : game === 'gi' ? 'GENSHIN' : game === 'zzz' ? 'ZENLESS' : game === 'hi3' ? 'HONKAI 3RD' : game.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
+                    <span
+                      className="text-[0.65rem] font-bold px-2 py-[2px] border uppercase"
+                      style={{ ...clipBadge, color: typeColor[type] || '#C8A96E', borderColor: `${typeColor[type] || '#C8A96E'}40`, background: `${typeColor[type] || '#C8A96E'}10` }}
+                    >
+                      {type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
+                    <span className="font-['Space_Mono',monospace] text-[0.75rem] text-[#4ECDC4]">
+                      ↑ {report.votes || 0}
+                    </span>
+                  </td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)] text-[#5A5248] text-[0.72rem] font-['Space_Mono',monospace]">
+                    {report.date || (report.createdAt ? new Date(report.createdAt).toLocaleDateString() : '-')}
+                  </td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
+                    <span
+                      className="text-[0.6rem] font-bold px-2 py-[2px] border uppercase"
+                      style={{
+                        ...clipBadge,
+                        color: s.color,
+                        borderColor: s.border,
+                        background: s.bg,
+                      }}
+                    >
+                      {s.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-[12px] border-b border-[rgba(200,169,110,0.07)]">
+                    <Link
+                      href={`/HoyoAdmin/report/${report.id}`}
+                      className="text-[0.65rem] px-3 py-1 rounded border border-[rgba(78,205,196,0.3)] text-[#4ECDC4] hover:bg-[rgba(78,205,196,0.1)] transition-all"
+                      style={clipBtn}
+                    >
+                      View Details
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {filteredReports.length === 0 && (
+        <div className="text-center py-12 text-[#5A5248] font-['Space_Mono',monospace] text-[0.8rem]">
+          No reports found.
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
+      `}</style>
     </div>
   );
 }

@@ -4,12 +4,18 @@ import { users } from './users';
 export const reports = mysqlTable('reports', {
   id: varchar('id', { length: 36 }).primaryKey(),
   title: varchar('title', { length: 255 }).notNull(),
-  type: mysqlEnum('type', ['mission', 'event', 'puzzle', 'guide', 'analysis']).notNull(),
+  type: mysqlEnum('type', ['mission', 'event', 'puzzle', 'guide', 'analysis', 'build']).notNull(),
   game: mysqlEnum('game', ['hsr', 'gi', 'zzz', 'hi3']).notNull(),
   version: varchar('version', { length: 20 }).notNull(),
-  authorId: varchar('author_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
+  
+  // ✅ YANG BENAR: userId (bukan authorId)
+  userId: varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
+  
   authorInitials: varchar('author_initials', { length: 10 }),
-  authorName: varchar('author_name', { length: 100 }), // Untuk menyimpan nama author
+  
+  // ❌ HAPUS baris ini (tidak ada di database)
+  // authorName: varchar('author_name', { length: 100 }),
+  
   content: text('content').notNull(),
   summary: text('summary'),
   tags: text('tags'),

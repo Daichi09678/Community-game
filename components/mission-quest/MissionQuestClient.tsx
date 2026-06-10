@@ -1,151 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { NavGroupLabel, NavBadge, NavItem } from './NavItem';
-import {
-  GridIcon,
-  HexIcon,
-  HexDotIcon,
-  CalendarIcon,
-  DiamondIcon,
-  UsersIcon,
-  StarIcon,
-  PersonIcon,
-  InfoIcon,
-} from './Icons';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { subscribeToReportStats, fetchReportStats } from '@/lib/reportStats';
 import { MainQuestCard } from './MainQuestCard';
 import { SideMissionRow } from './SideMissionRow';
 import { RightPanel } from './RightPanel';
 import { clipHex, clipBtn, clipCard, clipBadge } from './clipStyles';
 import { LoadingAnimation } from '@/components/ui';
 
-// ─── DATA ────────────────────────────────────────────────────────────────────
-
-const mainQuestData = [
-  {
-    id: "MQ001", title: "Where the Stairway Leads", game: "hsr", version: "3.2",
-    chapter: "Chapter IV", arc: "The Xianzhou Luofu Saga",
-    author: "AstreaN_7", initials: "AN", rating: 5, votes: 521,
-    date: "2h ago", status: "complete",
-    tags: ["Trailblaze", "Luofu", "Dan Heng"],
-    summary: "A deep-dive walkthrough of the pivotal main quest arc in version 3.2, covering all branching dialogues and hidden lore.",
-  },
-  {
-    id: "MQ002", title: "Natlan Archon Quest Act II — Goddess of the Flame",
-    game: "gi", version: "5.3", chapter: "Act II", arc: "Natlan Arc",
-    author: "VoidHunter_X", initials: "VH", rating: 4, votes: 334,
-    date: "5h ago", status: "complete",
-    tags: ["Archon Quest", "Natlan", "Pyro"],
-    summary: "Full story recap and all achievement triggers for the second act of the Natlan Archon Quest.",
-  },
-  {
-    id: "MQ003", title: "Robin & The Harmony of Stars", game: "hsr", version: "3.1",
-    chapter: "Interlude", arc: "Penacony Dreams",
-    author: "Cocolia_Arc", initials: "CA", rating: 5, votes: 489,
-    date: "4h ago", status: "complete",
-    tags: ["Interlude", "Robin", "Penacony"],
-    summary: "Character analysis and full quest guide for Robin's companion quest including all dialogue trees.",
-  },
-  {
-    id: "MQ004", title: "Farewell, Trailblaze Continuance", game: "hsr", version: "3.0",
-    chapter: "Epilogue", arc: "Penacony Arc",
-    author: "QuantumGale", initials: "QG", rating: 5, votes: 412,
-    date: "1d ago", status: "complete",
-    tags: ["Penacony", "Epilogue", "Aventurine"],
-    summary: "Complete walkthrough for the Penacony arc epilogue with all hidden collectibles and lore entries marked.",
-  },
-  {
-    id: "MQ005", title: "Chasca Hangout Quest — Winds of the Past", game: "gi", version: "5.3",
-    chapter: "Hangout", arc: "Natlan Stories",
-    author: "AstreaN_7", initials: "AN", rating: 5, votes: 298,
-    date: "1h ago", status: "complete",
-    tags: ["Hangout", "Chasca", "Natlan"],
-    summary: "All 6 endings guide for Chasca's hangout event with optimal route for achievement hunters.",
-  },
-  {
-    id: "MQ006", title: "Amphoreus — The Chrysos Heirs Prologue", game: "hsr", version: "3.2",
-    chapter: "Prologue", arc: "Amphoreus Saga",
-    author: "SilverWolf_Fan", initials: "SW", rating: 4, votes: 187,
-    date: "3h ago", status: "ongoing",
-    tags: ["Amphoreus", "New Arc", "3.2"],
-    summary: "First look and analysis of the new Amphoreus main quest prologue — story beats and lore implications.",
-  },
-];
-
-const sideMissionData = [
-  {
-    id: "SM001", title: "The Fox Waits Under the Crescent Moon",
-    game: "hsr", version: "3.2", type: "companion",
-    author: "ImaginaryRift", initials: "IR", rating: 5, votes: 267,
-    date: "2h ago", difficulty: "normal",
-    tags: ["Xianzhou", "Fugue", "Hidden"],
-    reward: "4★ Material ×8",
-    summary: "Hidden companion quest unlock guide — requires completing specific daily commissions in sequence.",
-  },
-  {
-    id: "SM002", title: "A Song Drifting Afar — Lumine's Letter",
-    game: "gi", version: "5.2", type: "world",
-    author: "QuantumGale", initials: "QG", rating: 4, votes: 198,
-    date: "6h ago", difficulty: "easy",
-    tags: ["World Quest", "Fontaine", "Lore"],
-    reward: "Primogem ×60",
-    summary: "Complete guide to this easily missable Fontaine world quest — all NPC locations and timed triggers.",
-  },
-  {
-    id: "SM003", title: "Hollow Zero Anomaly — District 7 Secret",
-    game: "zzz", version: "1.4", type: "exploration",
-    author: "Mei_Stellaron", initials: "MS", rating: 5, votes: 334,
-    date: "2h ago", difficulty: "hard",
-    tags: ["Hollow Zero", "Secret Room", "ZZZ"],
-    reward: "Polychrome ×80",
-    summary: "Step-by-step unlock for the hidden District 7 anomaly in Hollow Zero — exact puzzle input sequence included.",
-  },
-  {
-    id: "SM004", title: "Liyue Hidden Treasure — Geo Archon Relics",
-    game: "gi", version: "5.2", type: "exploration",
-    author: "SilverWolf_Fan", initials: "SW", rating: 4, votes: 178,
-    date: "3h ago", difficulty: "normal",
-    tags: ["Liyue", "Hidden", "Achievement"],
-    reward: "Mora ×150,000",
-    summary: "All 9 hidden Geo Archon relic locations in Liyue with interactive waypoint descriptions.",
-  },
-  {
-    id: "SM005", title: "Elysian Realm — Elysia's Secret Monologue",
-    game: "hi3", version: "7.4", type: "companion",
-    author: "TrailBossKai", initials: "TK", rating: 3, votes: 92,
-    date: "1h ago", difficulty: "hard",
-    tags: ["Elysian Realm", "Elysia", "HI3"],
-    reward: "ELF Shards ×40",
-    summary: "Unlock conditions and full transcript for Elysia's hidden monologue event in Elysian Realm.",
-  },
-  {
-    id: "SM006", title: "ZZZ: Bangboo Lab — All Secret Dialogue Routes",
-    game: "zzz", version: "1.3", type: "world",
-    author: "ImaginaryRift", initials: "IR", rating: 4, votes: 143,
-    date: "8h ago", difficulty: "easy",
-    tags: ["Bangboo", "Sixth Street", "Secret"],
-    reward: "Polychrome ×40",
-    summary: "All secret dialogue branches in the Bangboo Lab side quest — choose this specific path for bonus rewards.",
-  },
-  {
-    id: "SM007", title: "HSR: Xianzhou Rare Monster Hunt Chain",
-    game: "hsr", version: "3.1", type: "exploration",
-    author: "Cocolia_Arc", initials: "CA", rating: 5, votes: 221,
-    date: "5h ago", difficulty: "hard",
-    tags: ["Hunt", "Xianzhou", "Achievement"],
-    reward: "Stellar Jade ×40",
-    summary: "Complete chain guide for all 12 rare monster hunts on the Xianzhou Luofu — optimal kill order included.",
-  },
-  {
-    id: "SM008", title: "Genshin: Mondstadt Windtrace History Quest",
-    game: "gi", version: "5.1", type: "world",
-    author: "VoidHunter_X", initials: "VH", rating: 4, votes: 156,
-    date: "1d ago", difficulty: "normal",
-    tags: ["Mondstadt", "World Quest", "Windtrace"],
-    reward: "Primogem ×40",
-    summary: "Solving the hidden windtrace lore quest — NPC interaction order matters for the bonus ending.",
-  },
-];
+// ─── CLIP-PATH STYLE OBJECTS ─────────────────────────────────────────────────
+const clipHexSidebar = { clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' } as React.CSSProperties;
+const clipBadgeSidebar = { clipPath: 'polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%)' } as React.CSSProperties;
 
 type GameFilter = 'all' | 'hsr' | 'gi' | 'zzz' | 'hi3';
 type SideTypeFilter = 'all' | 'companion' | 'world' | 'exploration';
@@ -155,31 +22,450 @@ const gameLabels: Record<string, string> = {
   gi: 'Genshin Impact', zzz: 'Zenless Zone Zero', hi3: 'Honkai Impact 3rd',
 };
 
+interface MainQuest {
+  id: string;
+  title: string;
+  game: string;
+  version: string;
+  chapter: string;
+  arc: string;
+  author: string;
+  initials: string;
+  rating: number;
+  votes: number;
+  date: string;
+  status: string;
+  tags: string[];
+  summary: string;
+}
+
+interface SideMission {
+  id: string;
+  title: string;
+  game: string;
+  version: string;
+  type: string;
+  difficulty: string;
+  author: string;
+  initials: string;
+  rating: number;
+  votes: number;
+  date: string;
+  tags: string[];
+  reward: string;
+  summary: string;
+}
+
+// ─── ICON COMPONENTS ─────────────────────────────────────────────────────────
+const GridIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="1" y="1" width="6" height="6" stroke="currentColor" strokeWidth="1.2" rx="1"/>
+    <rect x="9" y="1" width="6" height="6" stroke="currentColor" strokeWidth="1.2" rx="1"/>
+    <rect x="1" y="9" width="6" height="6" stroke="currentColor" strokeWidth="1.2" rx="1"/>
+    <rect x="9" y="9" width="6" height="6" stroke="currentColor" strokeWidth="1.2" rx="1"/>
+  </svg>
+);
+
+const HexIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M8 2L14 5V11L8 14L2 11V5L8 2Z" stroke="currentColor" strokeWidth="1.2"/>
+    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1"/>
+  </svg>
+);
+
+const HexDotIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <polygon points="8,1 14,4 14,12 8,15 2,12 2,4" stroke="currentColor" strokeWidth="1.2"/>
+    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="0.8"/>
+  </svg>
+);
+
+const CalendarIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+    <line x1="1" y1="7" x2="15" y2="7" stroke="currentColor" strokeWidth="0.8"/>
+    <line x1="5" y1="1" x2="5" y2="5" stroke="currentColor" strokeWidth="1"/>
+    <line x1="11" y1="1" x2="11" y2="5" stroke="currentColor" strokeWidth="1"/>
+  </svg>
+);
+
+const DiamondIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <polygon points="8,1 14,5 14,11 8,15 2,11 2,5" stroke="currentColor" strokeWidth="1.2"/>
+    <line x1="8" y1="5" x2="11" y2="8" stroke="currentColor" strokeWidth="0.8"/>
+    <line x1="11" y1="8" x2="8" y2="11" stroke="currentColor" strokeWidth="0.8"/>
+    <line x1="8" y1="11" x2="5" y2="8" stroke="currentColor" strokeWidth="0.8"/>
+    <line x1="5" y1="8" x2="8" y2="5" stroke="currentColor" strokeWidth="0.8"/>
+  </svg>
+);
+
+const UsersIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="6" cy="6" r="3" stroke="currentColor" strokeWidth="1.2"/>
+    <circle cx="11" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.2"/>
+    <path d="M1 14 C1 11 4 10 6 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    <path d="M8.5 13.5 C8.5 11.5 10 11 11 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+  </svg>
+);
+
+const StarIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <polygon points="8,1 10,6 15,6 11,9 12.5,14 8,11 3.5,14 5,9 1,6 6,6" stroke="currentColor" strokeWidth="1.2"/>
+  </svg>
+);
+
+const PersonIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.2"/>
+    <path d="M2 14 C2 11 4.5 9.5 8 9.5 C11.5 9.5 14 11 14 14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+  </svg>
+);
+
+const InfoIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/>
+    <line x1="8" y1="5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    <circle cx="8" cy="11" r="0.7" fill="currentColor"/>
+  </svg>
+);
+
+// ─── NAV HELPERS ─────────────────────────────────────────────────────────────
+function NavGroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[0.62rem] font-bold tracking-[0.18em] uppercase text-[#5A5248] px-3 mb-2 mt-6 first:mt-0">
+      {children}
+    </div>
+  );
+}
+
+function NavBadge({ children, variant }: { children: React.ReactNode; variant?: 'new' }) {
+  return (
+    <span
+      className={`ml-auto font-['Space_Mono',monospace] text-[0.65rem] px-2 py-[2px]
+        ${variant === 'new'
+          ? 'bg-[rgba(78,205,196,0.15)] text-[#4ECDC4]'
+          : 'bg-[rgba(200,169,110,0.15)] text-[#C8A96E]'}`}
+      style={clipBadgeSidebar}
+    >
+      {children}
+    </span>
+  );
+}
+
+interface NavItemProps {
+  href?: string;
+  icon: React.ReactNode;
+  label: string;
+  badge?: string | number;
+  isNew?: boolean;
+  active?: boolean;
+}
+
+function NavItem({ href, icon, label, badge, isNew, active }: NavItemProps) {
+  const pathname = usePathname();
+  const isActive = active !== undefined ? active : (href ? pathname === href : false);
+
+  const cls = `flex items-center gap-[10px] px-3 py-[9px] text-[0.88rem] font-semibold
+    tracking-[0.04em] transition-all duration-200 cursor-pointer mb-[2px] no-underline relative
+    font-['Rajdhani',sans-serif]
+    ${isActive
+      ? 'bg-[rgba(200,169,110,0.1)] text-[#C8A96E]'
+      : 'text-[#9A8F78] hover:bg-[rgba(200,169,110,0.06)] hover:text-[#E8E0CC]'}`;
+
+  const inner = (
+    <>
+      {isActive && (
+        <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#C8A96E]" />
+      )}
+      <span className="w-4 h-4 shrink-0">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge !== null && badge !== 0 && (
+        <NavBadge>{badge}</NavBadge>
+      )}
+      {isNew && <NavBadge variant="new">New</NavBadge>}
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={cls} style={clipHexSidebar}>
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={cls} style={clipHexSidebar}>
+      {inner}
+    </div>
+  );
+}
+
 export function MissionQuestClient() {
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [gameFilter, setGameFilter] = useState<GameFilter>('all');
   const [sideTypeFilter, setSideTypeFilter] = useState<SideTypeFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [mainQuests, setMainQuests] = useState<MainQuest[]>([]);
+  const [sideMissions, setSideMissions] = useState<SideMission[]>([]);
+  
+  // Ref untuk debounce timeout
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Data untuk sidebar dari reportStats (realtime)
+  const [totalReports, setTotalReports] = useState(0);
+  const [categoryCounts, setCategoryCounts] = useState({
+    guide: 0,
+    event: 0,
+    puzzle: 0,
+    build: 0,
+  });
+  
+  // User data
+  const [user, setUser] = useState<{
+    id: string;
+    username: string;
+    email: string;
+    rank: string;
+    level: number;
+    xp: number;
+    initials: string;
+    totalReports: number;
+  } | null>(null);
+  
+  // Avatar photo state
+  const [avatarPhoto, setAvatarPhoto] = useState<string | null>(null);
+  // Banner photo state
+  const [bannerPhoto, setBannerPhoto] = useState<string | null>(null);
 
+  // Handle search with debounce
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    // Set new timer (500ms delay)
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(value);
+    }, 500);
+  };
+
+  // Fetch user
+  const fetchUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const userData = {
+          id: data.id,
+          username: data.username,
+          email: data.email,
+          rank: data.rank || 'Novice Omni-Voyager',
+          level: data.level || 1,
+          xp: data.xp || 0,
+          initials: data.initials || (data.username?.slice(0, 2).toUpperCase() || 'TB'),
+          totalReports: data.totalReports || 0
+        };
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Load avatar
+        if (data.avatarPhoto) {
+          setAvatarPhoto(data.avatarPhoto);
+          localStorage.setItem('userAvatar', data.avatarPhoto);
+        } else {
+          const savedAvatar = localStorage.getItem('userAvatar');
+          if (savedAvatar) setAvatarPhoto(savedAvatar);
+        }
+        
+        // Load banner
+        if (data.bannerPhoto) {
+          setBannerPhoto(data.bannerPhoto);
+          localStorage.setItem('userBanner', data.bannerPhoto);
+        } else {
+          const savedBanner = localStorage.getItem('userBanner');
+          if (savedBanner) setBannerPhoto(savedBanner);
+        }
+      } else {
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        } else {
+          setUser({
+            id: 'guest',
+            username: 'Guest',
+            email: 'guest@triablazer.com',
+            rank: 'Novice Omni-Voyager',
+            level: 1,
+            xp: 0,
+            initials: 'GT',
+            totalReports: 0
+          });
+        }
+        
+        const savedAvatar = localStorage.getItem('userAvatar');
+        if (savedAvatar) setAvatarPhoto(savedAvatar);
+        const savedBanner = localStorage.getItem('userBanner');
+        if (savedBanner) setBannerPhoto(savedBanner);
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        setUser(JSON.parse(savedUser));
+      }
+      const savedBanner = localStorage.getItem('userBanner');
+      if (savedBanner) setBannerPhoto(savedBanner);
+    }
+  };
+
+  // Fetch main quests dari API
+  const fetchMainQuests = useCallback(async () => {
+    try {
+      let url = `/api/mission-quest/main-quests?page=1&limit=50`;
+      if (gameFilter !== 'all') url += `&game=${gameFilter}`;
+      if (debouncedSearchQuery) url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
+      
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.quests) {
+          setMainQuests(data.quests);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching main quests:', error);
+    }
+  }, [gameFilter, debouncedSearchQuery]);
+
+  // Fetch side missions dari API
+  const fetchSideMissions = useCallback(async () => {
+    try {
+      let url = `/api/mission-quest/side-missions?page=1&limit=50`;
+      if (gameFilter !== 'all') url += `&game=${gameFilter}`;
+      if (sideTypeFilter !== 'all') url += `&type=${sideTypeFilter}`;
+      if (debouncedSearchQuery) url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
+      
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.missions) {
+          setSideMissions(data.missions);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching side missions:', error);
+    }
+  }, [gameFilter, sideTypeFilter, debouncedSearchQuery]);
+
+  // Listen for profile updates
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500);
-    return () => clearTimeout(timer);
+    const handleProfileUpdate = () => {
+      console.log('Profile updated, refreshing sidebar user data...');
+      fetchUser();
+    };
+    
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    window.addEventListener('adminProfileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+      window.removeEventListener('adminProfileUpdated', handleProfileUpdate);
+    };
   }, []);
 
-  const filteredMain = mainQuestData.filter(q => {
-    const matchGame = gameFilter === 'all' || q.game === gameFilter;
-    const matchSearch = !searchQuery || q.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchGame && matchSearch;
-  });
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
-  const filteredSide = sideMissionData.filter(m => {
-    const matchGame = gameFilter === 'all' || m.game === gameFilter;
-    const matchType = sideTypeFilter === 'all' || m.type === sideTypeFilter;
-    const matchSearch = !searchQuery || m.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchGame && matchType && matchSearch;
-  });
+  // Effect untuk fetch data ketika filter atau debounced search berubah
+  useEffect(() => {
+    // Subscribe ke global report stats untuk realtime update sidebar
+    const unsubscribe = subscribeToReportStats((stats) => {
+      console.log('📊 MissionQuestClient received stats:', stats);
+      setTotalReports(stats.totalReports);
+      setCategoryCounts(stats.categoryCounts);
+    });
+    
+    fetchUser();
+    fetchReportStats();
+    
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchMainQuests(),
+        fetchSideMissions(),
+      ]);
+      setLoading(false);
+    };
+    
+    loadData();
+    
+    const handleRefresh = () => {
+      fetchReportStats();
+      fetchUser();
+      fetchMainQuests();
+      fetchSideMissions();
+    };
+    
+    window.addEventListener('refreshSidebarStats', handleRefresh);
+    window.addEventListener('reportCreated', handleRefresh);
+    window.addEventListener('reportDeleted', handleRefresh);
+    
+    return () => {
+      unsubscribe();
+      window.removeEventListener('refreshSidebarStats', handleRefresh);
+      window.removeEventListener('reportCreated', handleRefresh);
+      window.removeEventListener('reportDeleted', handleRefresh);
+    };
+  }, []); // Empty dependency array untuk initial load
+
+  // Effect untuk refetch ketika filter berubah (tanpa loading awal)
+  useEffect(() => {
+    if (!loading) {
+      setSearchLoading(true);
+      Promise.all([
+        fetchMainQuests(),
+        fetchSideMissions(),
+      ]).finally(() => {
+        setSearchLoading(false);
+      });
+    }
+  }, [gameFilter, sideTypeFilter, debouncedSearchQuery, fetchMainQuests, fetchSideMissions, loading]);
+
+  const filteredMain = mainQuests;
+  const filteredSide = sideMissions;
+
+  // Format number untuk badge
+  const formattedTotalReports = totalReports >= 1000 
+    ? `${(totalReports / 1000).toFixed(1)}K` 
+    : totalReports.toString();
+
+  const formatCount = (count: number) => count.toString();
+
+  // Hitung XP progress
+  const currentLevelXP = user ? (user.level - 1) * 100 : 0;
+  const nextLevelXP = user ? user.level * 100 : 100;
+  const xpProgress = user ? ((user.xp - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100 : 0;
 
   const gamePillCls = (g: GameFilter) => {
     const base = 'px-[14px] py-[5px] text-[0.75rem] font-bold tracking-[0.08em] uppercase cursor-pointer transition-all duration-200 border border-transparent text-[#5A5248] bg-[rgba(255,255,255,0.03)]';
@@ -200,9 +486,13 @@ export function MissionQuestClient() {
     return `${base} ${gameFilter === g ? activeMap[g] : hoverMap[g]}`;
   };
 
+  // Tampilkan loading hanya saat initial load
   if (loading) {
     return <LoadingAnimation message="LOADING QUESTS & MISSIONS..." />;
   }
+
+  // Tampilkan loading indicator untuk search
+  const showSearchLoading = searchLoading && (searchQuery !== debouncedSearchQuery || searchQuery !== '');
 
   return (
     <div className="flex min-h-screen overflow-x-hidden" style={{ background: '#050810', color: '#E8E0CC', fontFamily: "'Rajdhani', sans-serif" }}>
@@ -213,47 +503,124 @@ export function MissionQuestClient() {
           radial-gradient(ellipse 40% 40% at 10% 80%, rgba(78,205,196,0.04) 0%, transparent 50%)`,
       }} />
 
-      {/* ── SIDEBAR ── */}
+      {/* ── SIDEBAR DENGAN BANNER BACKGROUND ── */}
       <aside className="w-[260px] shrink-0 bg-[#0C1220] border-r border-[rgba(200,169,110,0.15)] flex flex-col fixed top-0 bottom-0 left-0 z-50 overflow-y-auto max-md:hidden">
-        <div className="px-6 py-7 border-b border-[rgba(200,169,110,0.15)]">
-          <a href="#" className="flex items-center gap-[10px] font-['Cinzel',serif] text-[0.95rem] font-bold text-[#C8A96E] no-underline">
-            <svg width="28" height="28" viewBox="0 0 28 28">
-              <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#C8A96E" strokeWidth="1.2"/>
-              <circle cx="14" cy="14" r="3.5" fill="rgba(200,169,110,0.3)" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="14" y1="8"    x2="14" y2="10.5" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="14" y1="17.5" x2="14" y2="20"   stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="8"  y1="14"   x2="10.5" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="17.5" y1="14" x2="20"   y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
-            </svg>
-            Hoyoverse Hub
-          </a>
+        {/* Header dengan Banner Background */}
+        <div className="relative">
+          <div 
+            className="h-[100px] w-full relative overflow-hidden"
+            style={{ 
+              background: bannerPhoto 
+                ? `url(${bannerPhoto}) center/cover no-repeat` 
+                : 'linear-gradient(135deg, #0a0f1e 0%, #1a0a2e 40%, #0a1a20 100%)'
+            }}
+          >
+            {!bannerPhoto && Array.from({ length: 15 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute rounded-full bg-white"
+                style={{
+                  width: i % 3 === 0 ? '2px' : '1px',
+                  height: i % 3 === 0 ? '2px' : '1px',
+                  top: `${10 + (i * 17) % 80}%`,
+                  left: `${5 + (i * 23) % 90}%`,
+                  opacity: 0.1 + (i % 5) * 0.08,
+                }}
+              />
+            ))}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0C1220] via-transparent to-transparent" />
+          </div>
+          
+          <div className="absolute bottom-3 left-5 z-10">
+            <Link href="/UserHoyo/dashboard" className="flex items-center gap-[10px] font-['Cinzel',serif] text-[0.95rem] font-bold text-[#C8A96E] no-underline">
+              <svg width="28" height="28" viewBox="0 0 28 28">
+                <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#C8A96E" strokeWidth="1.2"/>
+                <circle cx="14" cy="14" r="3.5" fill="rgba(200,169,110,0.3)" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="14" y1="8"    x2="14" y2="10.5" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="14" y1="17.5" x2="14" y2="20"   stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="8"  y1="14"   x2="10.5" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="17.5" y1="14" x2="20"   y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
+              </svg>
+              Hoyoverse Hub
+            </Link>
+          </div>
+          
+          <div className="absolute bottom-3 right-5 z-10">
+            <div
+              className="text-[0.55rem] font-['Space_Mono',monospace] tracking-[0.15em] px-2 py-[2px] border"
+              style={{ ...clipBadgeSidebar, color: '#4ECDC4', borderColor: 'rgba(78,205,196,0.4)', background: 'rgba(78,205,196,0.08)' }}
+            >
+              ● USER
+            </div>
+          </div>
         </div>
 
         <nav className="flex-1 px-4 py-5">
           <NavGroupLabel>Main</NavGroupLabel>
-          <NavItem href="/UserHoyo/dashboard" active={false}><GridIcon /> Dashboard</NavItem>
-          <NavItem href="/UserHoyo/all-report" active={false}><HexIcon /> All Reports <NavBadge>1.2K</NavBadge></NavItem>
+          <NavItem 
+            href="/UserHoyo/dashboard" 
+            icon={<GridIcon />} 
+            label="Dashboard" 
+          />
+          <NavItem 
+            href="/UserHoyo/all-report" 
+            icon={<HexIcon />} 
+            label="All Reports" 
+            badge={formattedTotalReports}
+          />
 
           <NavGroupLabel>Category</NavGroupLabel>
-          <NavItem active={true}><HexDotIcon /> Mission &amp; Quest <NavBadge>482</NavBadge></NavItem>
-          <NavItem href="/UserHoyo/event" active={false}><CalendarIcon /> Event Seasonal <NavBadge variant="new">New</NavBadge></NavItem>
-          <NavItem href="/UserHoyo/puzzle" active={false}><DiamondIcon /> Puzzle &amp; Riddles <NavBadge>324</NavBadge></NavItem>
+          <NavItem 
+            active={true}
+            icon={<HexDotIcon />} 
+            label="Mission &amp; Quest" 
+            badge={formatCount(categoryCounts.guide)}
+          />
+          <NavItem 
+            href="/UserHoyo/event" 
+            icon={<CalendarIcon />} 
+            label="Event Seasonal" 
+            badge={formatCount(categoryCounts.event)}
+            isNew={categoryCounts.event > 0}
+          />
+          <NavItem 
+            href="/UserHoyo/puzzle" 
+            icon={<DiamondIcon />} 
+            label="Puzzle &amp; Riddles" 
+            badge={formatCount(categoryCounts.puzzle)}
+          />
 
           <NavGroupLabel>Community</NavGroupLabel>
-          <NavItem href="/UserHoyo/discussion" active={false}><UsersIcon /> Discussion</NavItem>
-          <NavItem href="/UserHoyo/leaderboard" active={false}><StarIcon /> Leaderboard</NavItem>
-          <NavItem href="/UserHoyo/profile" active={false}><PersonIcon /> My Profile</NavItem>
-          <NavItem href="/UserHoyo/settings" active={false}><InfoIcon /> Settings</NavItem>
+          <NavItem href="/UserHoyo/discussion" icon={<UsersIcon />} label="Discussion" />
+          <NavItem href="/UserHoyo/leaderboard" icon={<StarIcon />} label="Leaderboard" />
+          <NavItem href="/UserHoyo/profile" icon={<PersonIcon />} label="My Profile" />
+          <NavItem href="/UserHoyo/settings" icon={<InfoIcon />} label="Settings" />
         </nav>
 
         <div className="px-5 py-5 border-t border-[rgba(200,169,110,0.15)]">
-          <div className="flex items-center gap-[10px]">
-            <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0">TB</div>
-            <div>
-              <div className="text-[0.85rem] font-semibold text-[#E8E0CC]">Trailblazer_01</div>
-              <div className="text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">LV.60 · 48 reports</div>
+          <Link href="/UserHoyo/profile" className="flex items-center gap-[10px] no-underline group">
+            <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0 overflow-hidden">
+              {avatarPhoto ? (
+                <img src={avatarPhoto} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                user?.initials || 'TB'
+              )}
             </div>
-          </div>
+            <div className="flex-1">
+              <div className="text-[0.85rem] font-semibold text-[#E8E0CC] group-hover:text-[#C8A96E] transition-colors">
+                {user?.username || 'Trailblazer'}
+              </div>
+              <div className="text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">
+                LV.{user?.level || 1} · {user?.totalReports || 0} reports
+              </div>
+              <div className="mt-1 h-[2px] bg-[rgba(200,169,110,0.1)] rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#C8A96E] to-[#EDD28A] transition-all duration-300"
+                  style={{ width: `${Math.min(Math.max(xpProgress, 0), 100)}%` }}
+                />
+              </div>
+            </div>
+          </Link>
         </div>
       </aside>
 
@@ -277,14 +644,19 @@ export function MissionQuestClient() {
                 type="text"
                 placeholder="Search quests & missions..."
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={handleSearchChange}
                 className="bg-transparent border-none outline-none text-[#E8E0CC] font-['Rajdhani',sans-serif] text-[0.88rem] flex-1 placeholder-[#5A5248]"
               />
+              {showSearchLoading && (
+                <div className="w-4 h-4 border-2 border-[#C8A96E] border-t-transparent rounded-full animate-spin" />
+              )}
             </div>
-            <button className="px-[18px] py-2 text-[#050810] font-['Rajdhani',sans-serif] text-[0.8rem] font-bold tracking-[0.1em] uppercase cursor-pointer transition-all duration-200 hover:brightness-110 border-none"
-              style={{ background: 'linear-gradient(135deg, #8B6A2E, #C8A96E)', ...clipBtn }}>
-              + Write Report
-            </button>
+            <Link href="/UserHoyo/create-report">
+              <button className="px-[18px] py-2 text-[#050810] font-['Rajdhani',sans-serif] text-[0.8rem] font-bold tracking-[0.1em] uppercase cursor-pointer transition-all duration-200 hover:brightness-110 border-none"
+                style={{ background: 'linear-gradient(135deg, #8B6A2E, #C8A96E)', ...clipBtn }}>
+                + Write Report
+              </button>
+            </Link>
           </div>
         </div>
 
@@ -393,15 +765,22 @@ export function MissionQuestClient() {
             </div>
 
             {/* Right panel */}
-            <RightPanel gameFilter={gameFilter} />
+            <RightPanel gameFilter={gameFilter} categoryCounts={categoryCounts} />
           </div>
         </div>
       </main>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space+Mono&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space_Mono&display=swap');
         .line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
         .line-clamp-2 { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .animate-spin {
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       `}</style>
     </div>
   );

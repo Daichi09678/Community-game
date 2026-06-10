@@ -55,10 +55,9 @@ export default function SignIn() {
           document.getElementById('otp-0')?.focus();
         }, 100);
         
-        // Auto-fill OTP untuk development
+        // 🔥 HANYA LOG DI CONSOLE, TIDAK AUTO-FILL
         if (result.devOTP && process.env.NODE_ENV === 'development') {
-          const devOtpDigits = result.devOTP.split('');
-          setOtp(devOtpDigits.concat(Array(6 - devOtpDigits.length).fill('')));
+          console.log('📱 Dev OTP Code:', result.devOTP);
         }
       }
     } catch (err) {
@@ -194,6 +193,9 @@ export default function SignIn() {
         setOtp(['','','','','','']);
         startResendCooldown();
         document.getElementById('otp-0')?.focus();
+        if (result.devOTP && process.env.NODE_ENV === 'development') {
+          console.log('📱 New Dev OTP Code:', result.devOTP);
+        }
       }
     } catch (err) {
       console.error('Resend error:', err);

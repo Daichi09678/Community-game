@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SidebarAllReport, ReportsTable, RightWidgets, GamePills, clipBtn } from './index';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -35,14 +35,17 @@ export default function AllReportClient() {
   const [gameFilter, setGameFilter] = useState<GameFilter>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchInput, setSearchInput] = useState<string>('');
+  const [isSearching, setIsSearching] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 0,
     totalItems: 0,
   });
+  
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchReports = async (page: number = 1) => {
+  const fetchReports = useCallback(async (page: number = 1) => {
     setLoading(true);
     try {
       let url = `${API_BASE_URL}/api/dashboard/reports?page=${page}&limit=10`;
@@ -75,22 +78,58 @@ export default function AllReportClient() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchReports(1);
   }, [gameFilter, filterType, searchQuery]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearchQuery(searchInput);
+  // Handle search with debounce
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    // If value is empty, clear search immediately
+    if (value.trim() === '') {
+      setSearchQuery('');
+      setIsSearching(false);
+      return;
+    }
+    
+    // Show loading indicator
+    setIsSearching(true);
+    
+    // Set new timer (500ms delay)
+    debounceTimerRef.current = setTimeout(() => {
+      setSearchQuery(value);
+      setIsSearching(false);
+    }, 500);
   };
 
   const clearSearch = () => {
     setSearchInput('');
     setSearchQuery('');
+    setIsSearching(false);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
   };
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchReports(1);
+  }, [fetchReports]);
+
+  // Show loading spinner for initial load
   if (loading && reports.length === 0) {
     return (
       <div className="min-h-screen bg-[#050810] flex items-center justify-center">
@@ -166,27 +205,28 @@ export default function AllReportClient() {
             </div>
 
             <div className="flex gap-2">
-              <form onSubmit={handleSearch} className="flex gap-2">
-                <div className="flex items-center gap-2 bg-[#0C1220] border border-[rgba(200,169,110,0.15)] px-4 py-2" style={clipBtn}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <circle cx="6" cy="6" r="4.5" stroke="#5A5248" strokeWidth="1.2"/>
-                    <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="#5A5248" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search reports..."
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    className="bg-transparent border-none outline-none text-[#E8E0CC] w-48 placeholder-[#5A5248]"
-                  />
-                  {searchInput && (
-                    <button type="button" onClick={clearSearch} className="text-[#5A5248] hover:text-[#E05C7A]">✕</button>
-                  )}
-                </div>
-                <button type="submit" className="px-4 py-2 bg-[rgba(200,169,110,0.1)] border border-[#C8A96E] text-[#C8A96E] text-[0.7rem] font-bold uppercase tracking-wide" style={clipBtn}>
-                  Search
-                </button>
-              </form>
+              {/* SEARCH INPUT WITH DEBOUNCE - NO SEARCH BUTTON */}
+              <div className="flex items-center gap-2 bg-[#0C1220] border border-[rgba(200,169,110,0.15)] px-4 py-2 min-w-[260px]" style={clipBtn}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <circle cx="6" cy="6" r="4.5" stroke="#5A5248" strokeWidth="1.2"/>
+                  <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="#5A5248" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search reports..."
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  className="bg-transparent border-none outline-none text-[#E8E0CC] w-48 placeholder-[#5A5248]"
+                />
+                {isSearching && (
+                  <div className="w-4 h-4 border-2 border-[#C8A96E] border-t-transparent rounded-full animate-spin" />
+                )}
+                {searchInput && !isSearching && (
+                  <button type="button" onClick={clearSearch} className="text-[#5A5248] hover:text-[#E05C7A] transition-colors">
+                    ✕
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={() => window.location.href = '/UserHoyo/write-report'}
@@ -201,7 +241,7 @@ export default function AllReportClient() {
 
         {/* Content */}
         <div className="p-8 flex-1">
-          {/* Game Filters - MENGGUNAKAN KOMPONEN GAME PILLS */}
+          {/* Game Filters */}
           <GamePills activeGame={gameFilter} onGameChange={setGameFilter} />
 
           {/* Reports Table and Right Widgets */}
@@ -210,7 +250,7 @@ export default function AllReportClient() {
               filteredReports={reports}
               filterType={filterType}
               setFilterType={setFilterType}
-              loading={loading}
+              loading={loading && reports.length === 0 ? false : loading}
             />
             <RightWidgets />
           </div>
@@ -244,6 +284,13 @@ export default function AllReportClient() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space+Mono&display=swap');
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 0.8s linear infinite;
+        }
       `}</style>
     </div>
   );

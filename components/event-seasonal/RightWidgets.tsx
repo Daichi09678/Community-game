@@ -4,16 +4,26 @@ import { gameMeta, GameBadge } from './GameBadge';
 import { clipWidget, clipBadge } from './clipStyles';
 
 type GameKey = 'hsr' | 'gi' | 'zzz' | 'hi3';
-type EventStatus = 'live' | 'upcoming' | 'ended';
 
 interface HoyoEvent {
-  id: number;
+  id: string | number;
   title: string;
   game: GameKey;
-  status: EventStatus;
+  reportStatus: 'published' | 'pending' | 'archived';
+  category: 'limited' | 'permanent' | 'collab' | 'seasonal';
   startDate: string;
   endDate: string;
-  daysLeft: number;
+  rewards: string[];
+  description: string;
+  tag: string;
+  featured?: boolean;
+  thumbnail?: string;
+  content?: string;
+  authorName?: string;
+  authorInitials?: string;
+  votes?: number;
+  views?: number;
+  createdAt?: string;
 }
 
 const calendarData = [
@@ -36,12 +46,18 @@ function WidgetTitle({ children }: { children: React.ReactNode }) {
 }
 
 export function RightWidgets({ events }: { events: HoyoEvent[] }) {
-  const liveCount = events.filter(e => e.status === 'live').length;
-  const upcomingCount = events.filter(e => e.status === 'upcoming').length;
+  const publishedCount = events.filter(e => e.reportStatus === 'published').length;
+  const pendingCount = events.filter(e => e.reportStatus === 'pending').length;
+  const archivedCount = events.filter(e => e.reportStatus === 'archived').length;
 
-  const endingSoon = events
-    .filter(e => e.status === 'live')
-    .sort((a, b) => a.daysLeft - b.daysLeft)
+  // Recently added events (based on createdAt)
+  const recentEvents = [...events]
+    .sort((a, b) => {
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      return 0;
+    })
     .slice(0, 4);
 
   return (
@@ -51,10 +67,10 @@ export function RightWidgets({ events }: { events: HoyoEvent[] }) {
         <WidgetTitle>Event Overview</WidgetTitle>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'Live Now', value: liveCount, color: '#6DD18A' },
-            { label: 'Upcoming', value: upcomingCount, color: '#C8A96E' },
-            { label: 'Total Events', value: events.length, color: '#4ECDC4' },
-            { label: 'Games', value: 4, color: '#A855F7' },
+            { label: 'Accepted', value: publishedCount, color: '#4ECDC4' },
+            { label: 'Pending', value: pendingCount, color: '#F5A623' },
+            { label: 'Rejected', value: archivedCount, color: '#E05C7A' },
+            { label: 'Total Events', value: events.length, color: '#C8A96E' },
           ].map((stat, i) => (
             <div
               key={i}
@@ -76,35 +92,39 @@ export function RightWidgets({ events }: { events: HoyoEvent[] }) {
         </div>
       </div>
 
-      {/* Ending Soon */}
+      {/* Recent Events (Replaces Ending Soon) */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
-        <WidgetTitle>Ending Soon</WidgetTitle>
-        {endingSoon.map((ev, i) => (
-          <div key={i} className="flex items-center gap-3 py-[10px] border-b border-[rgba(200,169,110,0.06)] last:border-b-0">
-            <div
-              className="shrink-0 w-[6px] h-[6px] rounded-full"
-              style={{ background: gameMeta[ev.game].color }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="text-[0.8rem] text-[#9A8F78] truncate">{ev.title}</div>
-              <div className="text-[0.65rem] text-[#5A5248] mt-[1px]">{gameMeta[ev.game].label}</div>
+        <WidgetTitle>Recent Events</WidgetTitle>
+        {recentEvents.length > 0 ? (
+          recentEvents.map((ev, i) => (
+            <div key={i} className="flex items-center gap-3 py-[10px] border-b border-[rgba(200,169,110,0.06)] last:border-b-0">
+              <div
+                className="shrink-0 w-[6px] h-[6px] rounded-full"
+                style={{ background: gameMeta[ev.game].color }}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-[0.8rem] text-[#9A8F78] truncate">{ev.title}</div>
+                <div className="text-[0.65rem] text-[#5A5248] mt-[1px]">{gameMeta[ev.game].label}</div>
+              </div>
+              <div
+                className="font-['Space_Mono',monospace] text-[0.65rem] px-2 py-[2px]"
+                style={{
+                  ...clipBadge,
+                  color: ev.reportStatus === 'published' ? '#4ECDC4' : ev.reportStatus === 'pending' ? '#F5A623' : '#E05C7A',
+                  background: ev.reportStatus === 'published' ? 'rgba(78,205,196,0.08)' : ev.reportStatus === 'pending' ? 'rgba(245,166,35,0.08)' : 'rgba(224,92,122,0.08)',
+                  border: `1px solid ${ev.reportStatus === 'published' ? 'rgba(78,205,196,0.25)' : ev.reportStatus === 'pending' ? 'rgba(245,166,35,0.25)' : 'rgba(224,92,122,0.25)'}`,
+                }}
+              >
+                {ev.reportStatus === 'published' ? '✓' : ev.reportStatus === 'pending' ? '⏳' : '✗'}
+              </div>
             </div>
-            <div
-              className="font-['Space_Mono',monospace] text-[0.72rem] font-bold px-2 py-[2px]"
-              style={{
-                ...clipBadge,
-                color: ev.daysLeft <= 7 ? '#E05C7A' : '#C8A96E',
-                background: ev.daysLeft <= 7 ? 'rgba(224,92,122,0.08)' : 'rgba(200,169,110,0.08)',
-                border: `1px solid ${ev.daysLeft <= 7 ? 'rgba(224,92,122,0.25)' : 'rgba(200,169,110,0.25)'}`,
-              }}
-            >
-              {ev.daysLeft}d
-            </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <div className="text-center py-4 text-[0.7rem] text-[#5A5248]">No events yet</div>
+        )}
       </div>
 
-      {/* Weekly Calendar */}
+      {/* Weekly Calendar - same as before */}
       <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
         <WidgetTitle>This Week</WidgetTitle>
         <div className="space-y-[6px]">
@@ -120,9 +140,9 @@ export function RightWidgets({ events }: { events: HoyoEvent[] }) {
                     className="text-[0.6rem] px-[6px] py-[1px] font-semibold"
                     style={{
                       ...clipBadge,
-                      background: gameMeta[ev.game as GameKey].bg,
-                      color: gameMeta[ev.game as GameKey].color,
-                      border: `1px solid ${gameMeta[ev.game as GameKey].border}`,
+                      background: gameMeta[ev.game].bg,
+                      color: gameMeta[ev.game].color,
+                      border: `1px solid ${gameMeta[ev.game].border}`,
                     }}
                   >
                     {ev.short}
@@ -139,8 +159,8 @@ export function RightWidgets({ events }: { events: HoyoEvent[] }) {
         <WidgetTitle>Events by Game</WidgetTitle>
         {(['hsr', 'gi', 'zzz', 'hi3'] as GameKey[]).map(g => {
           const count = events.filter(e => e.game === g).length;
-          const liveC = events.filter(e => e.game === g && e.status === 'live').length;
-          const pct = Math.round((count / events.length) * 100);
+          const liveC = events.filter(e => e.game === g && e.reportStatus === 'published').length;
+          const pct = events.length > 0 ? Math.round((count / events.length) * 100) : 0;
           return (
             <div key={g} className="mb-3">
               <div className="flex justify-between items-center mb-1">
@@ -151,12 +171,12 @@ export function RightWidgets({ events }: { events: HoyoEvent[] }) {
                       className="text-[0.6rem] px-[5px] py-[1px] font-bold"
                       style={{
                         ...clipBadge,
-                        background: 'rgba(109,209,138,0.12)',
-                        color: '#6DD18A',
-                        border: '1px solid rgba(109,209,138,0.3)',
+                        background: 'rgba(78,205,196,0.12)',
+                        color: '#4ECDC4',
+                        border: '1px solid rgba(78,205,196,0.3)',
                       }}
                     >
-                      {liveC} live
+                      {liveC} accepted
                     </span>
                   )}
                   <span className="text-[0.7rem] font-['Space_Mono',monospace] text-[#5A5248]">{count}</span>

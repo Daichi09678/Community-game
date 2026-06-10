@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { clipBtn, clipBadge, clipCard } from './clipStyles';
 
 function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -20,9 +20,12 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
+  const [email, setEmail] = useState('');
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
   const inputRefs = [
     useRef<HTMLInputElement>(null),
@@ -32,6 +35,29 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
     useRef<HTMLInputElement>(null),
     useRef<HTMLInputElement>(null),
   ];
+
+  // Fetch user email saat modal dibuka
+  const fetchUserEmail = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setEmail(data.email);
+      }
+    } catch (error) {
+      console.error('Error fetching user email:', error);
+    }
+  };
+
+  // Reset state saat modal dibuka
+  useEffect(() => {
+    if (open) {
+      fetchUserEmail();
+      resetForm();
+    }
+  }, [open]);
 
   const pwStrength = (pw: string) => {
     let score = 0;
@@ -46,37 +72,169 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'][strength];
   const strengthColor = ['', '#E05C7A', '#C8A96E', '#4ECDC4', '#6DD18A'][strength];
 
-  const handleFormSubmit = () => {
+  // Kirim OTP untuk verifikasi change password
+  const sendOTP = async () => {
+    try {
+      const response = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email }),
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send OTP');
+      }
+      return true;
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      setError(error instanceof Error ? error.message : 'Failed to send verification code');
+      return false;
+    }
+  };
+
+  // Handle form submit - cek current password dulu, lalu kirim OTP
+  const handleFormSubmit = async () => {
     setError('');
     if (!currentPw) return setError('Enter your current password.');
     if (newPw.length < 8) return setError('New password must be at least 8 characters.');
     if (newPw !== confirmPw) return setError('Passwords do not match.');
+    
     setLoading(true);
-    setTimeout(() => { setLoading(false); setStep('verify'); }, 1000);
+    
+    try {
+      // First, verify current password via login attempt
+      const verifyResponse = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password: currentPw }),
+      });
+      
+      const verifyData = await verifyResponse.json();
+      
+      if (!verifyResponse.ok || !verifyData.requiresOTP) {
+        setError('Current password is incorrect.');
+        setLoading(false);
+        return;
+      }
+      
+      // Current password is correct, now send OTP
+      const otpSent = await sendOTP();
+      if (otpSent) {
+        setStep('verify');
+        setCode(['', '', '', '', '', '']);
+        setError('');
+      }
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      setError('Failed to verify current password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCodeChange = (i: number, val: string) => {
-    if (!/^\d*$/.test(val)) return;
-    const next = [...code];
-    next[i] = val.slice(-1);
-    setCode(next);
-    if (val && i < 5) inputRefs[i + 1].current?.focus();
+  // Resend OTP
+  const handleResendCode = async () => {
+    if (resendCooldown) return;
+    
+    setResendCooldown(true);
+    setCooldownSeconds(60);
+    
+    const timer = setInterval(() => {
+      setCooldownSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setResendCooldown(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    const success = await sendOTP();
+    if (!success) {
+      setError('Failed to resend code. Please try again.');
+    } else {
+      setError('');
+    }
   };
 
-  const handleCodeKey = (i: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !code[i] && i > 0) inputRefs[i - 1].current?.focus();
-  };
-
-  const handleVerify = () => {
-    if (code.join('').length < 6) return setError('Enter the full 6-digit code.');
+  // Verify OTP dan update password
+  const handleVerify = async () => {
+    const otpCode = code.join('');
+    if (otpCode.length < 6) return setError('Enter the full 6-digit code.');
     setError('');
     setLoading(true);
-    setTimeout(() => { setLoading(false); setStep('success'); }, 1200);
+    
+    try {
+      // Verify OTP for forget password flow
+      const verifyResponse = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, code: otpCode }),
+      });
+      
+      const verifyData = await verifyResponse.json();
+      
+      if (!verifyResponse.ok || !verifyData.verified) {
+        setError(verifyData.error || 'Invalid verification code');
+        setLoading(false);
+        return;
+      }
+      
+      // OTP verified, now reset password
+      const resetResponse = await fetch('/api/auth/forget-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, code: otpCode, newPassword: newPw }),
+      });
+      
+      const resetData = await resetResponse.json();
+      
+      if (!resetResponse.ok) {
+        setError(resetData.error || 'Failed to update password');
+        setLoading(false);
+        return;
+      }
+      
+      // Success
+      setStep('success');
+      setError('');
+      
+      // Dispatch event with current timestamp
+      window.dispatchEvent(new CustomEvent('passwordChanged', {
+        detail: { 
+          timestamp: new Date().toISOString(),
+          message: 'Password changed successfully'
+        }
+      }));
+      
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      setError('Verification failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setStep('form');
+    setCurrentPw('');
+    setNewPw('');
+    setConfirmPw('');
+    setCode(['', '', '', '', '', '']);
+    setError('');
+    setLoading(false);
+    setResendCooldown(false);
+    setCooldownSeconds(0);
   };
 
   const resetAndClose = () => {
-    setStep('form'); setCurrentPw(''); setNewPw(''); setConfirmPw('');
-    setCode(['', '', '', '', '', '']); setError(''); setLoading(false);
+    resetForm();
     onClose();
   };
 
@@ -163,20 +321,38 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
                 </div>
               </div>
               <div className="font-['Rajdhani',sans-serif] text-[0.88rem] font-bold text-[#E8E0CC] mb-1">Check your email</div>
-              <div className="text-[0.68rem] text-[#5A5248] font-['Space_Mono',monospace] leading-relaxed">A 6-digit code was sent to<br /><span className="text-[#C8A96E]">trailblazer@cosmoexpress.net</span></div>
+              <div className="text-[0.68rem] text-[#5A5248] font-['Space_Mono',monospace] leading-relaxed">A 6-digit code was sent to<br /><span className="text-[#C8A96E]">{email || 'your email'}</span></div>
             </div>
 
             <div className="flex gap-2 justify-center mb-4">
               {code.map((digit, i) => (
                 <input key={i} ref={inputRefs[i]} type="text" inputMode="numeric" maxLength={1} value={digit}
-                  onChange={e => handleCodeChange(i, e.target.value)} onKeyDown={e => handleCodeKey(i, e)}
+                  onChange={e => {
+                    if (!/^\d*$/.test(e.target.value)) return;
+                    const next = [...code];
+                    next[i] = e.target.value.slice(-1);
+                    setCode(next);
+                    if (e.target.value && i < 5) inputRefs[i + 1].current?.focus();
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Backspace' && !code[i] && i > 0) inputRefs[i - 1].current?.focus();
+                  }}
                   className="w-10 h-12 text-center text-[1.1rem] font-bold font-['Space_Mono',monospace] text-[#C8A96E] outline-none transition-all duration-200"
                   style={{ background: digit ? 'rgba(200,169,110,0.08)' : 'rgba(200,169,110,0.03)', border: `1px solid ${digit ? 'rgba(200,169,110,0.5)' : 'rgba(200,169,110,0.15)'}`, clipPath: 'polygon(4px 0,100% 0,calc(100% - 4px) 100%,0 100%)' }} />
               ))}
             </div>
 
             <div className="text-center mb-5">
-              <span className="text-[0.62rem] text-[#5A5248] font-['Space_Mono',monospace]">Didn&apos;t receive it? <span className="text-[#C8A96E] cursor-pointer hover:text-[#F0D080]">Resend code</span></span>
+              <span className="text-[0.62rem] text-[#5A5248] font-['Space_Mono',monospace]">
+                Didn&apos;t receive it?{' '}
+                <button 
+                  onClick={handleResendCode}
+                  disabled={resendCooldown}
+                  className={`${resendCooldown ? 'text-[#5A5248] cursor-not-allowed' : 'text-[#C8A96E] hover:text-[#F0D080] cursor-pointer'} bg-transparent border-none`}
+                >
+                  Resend code {resendCooldown && `(${cooldownSeconds}s)`}
+                </button>
+              </span>
             </div>
 
             {error && <div className="text-[0.68rem] text-[#E05C7A] font-['Space_Mono',monospace] py-2 px-3 bg-[rgba(224,92,122,0.06)] border border-[rgba(224,92,122,0.2)] mb-4" style={clipBadge}>{error}</div>}

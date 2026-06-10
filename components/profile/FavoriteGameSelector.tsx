@@ -13,12 +13,12 @@ export function FavoriteGameSelector({ selected, onChange, isEditing }: {
     else onChange([...selected, g]);
   };
   if (!isEditing) return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex gap-2 flex-wrap justify-center">
       {selected.map(g => <GameBadge key={g} game={g} />)}
     </div>
   );
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex gap-2 flex-wrap justify-center">
       {games.map(g => {
         const info = gameBadgeMap[g];
         const active = selected.includes(g);
@@ -32,4 +32,4 @@ export function FavoriteGameSelector({ selected, onChange, isEditing }: {
       })}
     </div>
   );
-}
+} 

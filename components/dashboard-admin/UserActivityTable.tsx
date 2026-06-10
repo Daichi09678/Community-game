@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { clipBadge } from '@/components/common/clipStyles';
 
 interface UserActivity {
@@ -38,6 +39,13 @@ const EyeIcon = () => (
 );
 
 export default function UserActivityTable({ users, onSelectUser, selectedId }: UserActivityTableProps) {
+  const router = useRouter();
+
+  const handleViewProfile = (userId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/HoyoAdmin/user-profile/${userId}`);
+  };
+
   const statusStyle: Record<string, { color: string; bg: string; border: string }> = {
     active: { color: '#4ECDC4', bg: 'rgba(78,205,196,0.08)', border: 'rgba(78,205,196,0.3)' },
     inactive: { color: '#C8A96E', bg: 'rgba(200,169,110,0.08)', border: 'rgba(200,169,110,0.3)' },
@@ -108,7 +116,7 @@ export default function UserActivityTable({ users, onSelectUser, selectedId }: U
                 <td className="px-4 py-[14px] border-b border-[rgba(200,169,110,0.07)] align-middle">
                   <button
                     className="flex items-center gap-1 text-[0.68rem] text-[#C8A96E] hover:text-[#EDD28A] transition-colors font-['Space_Mono',monospace]"
-                    onClick={e => { e.stopPropagation(); onSelectUser(user); }}
+                    onClick={(e) => handleViewProfile(user.id, e)}
                   >
                     <EyeIcon /> View
                   </button>

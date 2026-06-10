@@ -83,3 +83,34 @@ export const reports = mysqlTable('report', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
+
+
+
+// ... tabel users, userProfiles, otpCodes, reports, adminActivities yang sudah ada ...
+
+// Tambahkan tabel events
+export const events = mysqlTable('events', {
+  id: int('id').primaryKey().autoincrement(),
+  title: varchar('title', { length: 255 }).notNull(),
+  description: text('description'),
+  game: mysqlEnum('game', ['hsr', 'gi', 'zzz', 'hi3']).notNull(),
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  status: mysqlEnum('status', ['live', 'upcoming', 'ended']).notNull().default('upcoming'),
+  thumbnail: varchar('thumbnail', { length: 500 }),
+  createdBy: varchar('created_by', { length: 36 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+// Tambahkan tabel userEventSubmissions (opsional)
+export const userEventSubmissions = mysqlTable('user_event_submissions', {
+  id: int('id').primaryKey().autoincrement(),
+  eventId: int('event_id').references(() => events.id, { onDelete: 'cascade' }),
+  userId: varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
+  status: mysqlEnum('status', ['pending', 'approved', 'rejected']).default('pending'),
+  submittedAt: timestamp('submitted_at').defaultNow(),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedBy: varchar('reviewed_by', { length: 36 }),
+  notes: text('notes'),
+});

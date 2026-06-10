@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { clipBtn } from '@/components/utils/styles';
 import { GameFilter, gameLabels } from '@/components/utils/constants';
 
@@ -14,20 +14,64 @@ interface TopbarProps {
 
 export function Topbar({ activeGame, onSearch, searchQuery = '', onClearSearch }: TopbarProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const [isSearching, setIsSearching] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (onSearch) {
-      onSearch(localSearch);
+  // Update localSearch when searchQuery prop changes (from clear)
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Handle search with debounce
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocalSearch(value);
+    
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
+    
+    // If value is empty, clear search immediately
+    if (value.trim() === '') {
+      if (onClearSearch) {
+        onClearSearch();
+      }
+      setIsSearching(false);
+      return;
+    }
+    
+    // Show loading indicator
+    setIsSearching(true);
+    
+    // Set new timer (500ms delay)
+    debounceTimerRef.current = setTimeout(() => {
+      if (onSearch) {
+        onSearch(value);
+      }
+      setIsSearching(false);
+    }, 500);
   };
 
   const handleClear = () => {
     setLocalSearch('');
+    setIsSearching(false);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
     if (onClearSearch) {
       onClearSearch();
     }
   };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex items-center justify-between px-8 py-4 border-b border-[rgba(200,169,110,0.15)] sticky top-0 z-40 backdrop-blur-[10px]" style={{ background: 'rgba(5,8,16,0.8)' }}>
@@ -39,8 +83,8 @@ export function Topbar({ activeGame, onSearch, searchQuery = '', onClearSearch }
         </div>
       </div>
       <div className="flex gap-[10px] items-center">
-        {/* 🔥 SEARCH INPUT DENGAN FORM */}
-        <form onSubmit={handleSearchSubmit} className="relative">
+        {/* SEARCH INPUT DENGAN DEBOUNCE */}
+        <div className="relative">
           <div className="flex items-center gap-2 bg-[#0C1220] border border-[rgba(200,169,110,0.15)] px-[14px] py-[7px] w-64 transition-colors duration-200 focus-within:border-[#C8A96E]" style={clipBtn}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <circle cx="6" cy="6" r="4.5" stroke="#5A5248" strokeWidth="1.2"/>
@@ -50,10 +94,13 @@ export function Topbar({ activeGame, onSearch, searchQuery = '', onClearSearch }
               type="text" 
               placeholder="Search reports, guides, events..." 
               value={localSearch}
-              onChange={e => setLocalSearch(e.target.value)}
+              onChange={handleSearchChange}
               className="bg-transparent border-none outline-none text-[#E8E0CC] font-['Rajdhani',sans-serif] text-[0.88rem] flex-1 placeholder-[#5A5248]"
             />
-            {localSearch && (
+            {isSearching && (
+              <div className="w-4 h-4 border-2 border-[#C8A96E] border-t-transparent rounded-full animate-spin" />
+            )}
+            {localSearch && !isSearching && (
               <button 
                 type="button"
                 onClick={handleClear}
@@ -63,7 +110,7 @@ export function Topbar({ activeGame, onSearch, searchQuery = '', onClearSearch }
               </button>
             )}
           </div>
-        </form>
+        </div>
         
         <Link 
           href="/UserHoyo/write-report"
@@ -73,6 +120,16 @@ export function Topbar({ activeGame, onSearch, searchQuery = '', onClearSearch }
           + Write Report
         </Link>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 0.8s linear infinite;
+        }
+      `}</style>
     </div>
   );
 }

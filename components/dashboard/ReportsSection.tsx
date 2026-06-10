@@ -70,7 +70,7 @@ export function ReportsSection({
             </span>
           )}
         </div>
-        <a className="text-[#C8A96E] text-[0.78rem] font-semibold tracking-[0.08em] no-underline cursor-pointer">View all →</a>
+        {/* Tombol View all dihapus dari sini */}
       </div>
 
       <div className="flex gap-[6px] mb-5 flex-wrap">

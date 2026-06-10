@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { clipBadge } from './clipStyles';
 
 export const bgOptions = [
@@ -11,21 +12,72 @@ export const bgOptions = [
   { id: 'hollow',    label: 'Hollow Static', style: { background: 'repeating-linear-gradient(0deg, rgba(168,85,247,0.03) 0px, transparent 2px, transparent 40px), repeating-linear-gradient(90deg, rgba(168,85,247,0.02) 0px, transparent 2px, transparent 40px), radial-gradient(ellipse 80% 60% at 50% 30%, rgba(168,85,247,0.12) 0%, transparent 60%), #050508' } },
 ];
 
-export function ProfileBanner({ bgId, isEditing, onBgChange }: {
-  bgId: string; isEditing: boolean; onBgChange: (id: string) => void;
+export function ProfileBanner({ 
+  bgId, 
+  isEditing, 
+  onBgChange,
+  customPhoto,
+  onPhotoUpload,
+  onPhotoRemove,
+}: {
+  bgId: string;
+  isEditing: boolean;
+  onBgChange: (id: string) => void;
+  customPhoto?: string | null;
+  onPhotoUpload?: (file: File) => Promise<void>;
+  onPhotoRemove?: () => Promise<void>;
 }) {
   const bg = bgOptions.find(b => b.id === bgId) || bgOptions[0];
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    if (onPhotoUpload) {
+      await onPhotoUpload(file);
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRemovePhoto = async () => {
+    if (onPhotoRemove) {
+      await onPhotoRemove();
+    }
+  };
+
+  const bannerStyle = customPhoto
+    ? { background: `url(${customPhoto}) center/cover no-repeat` }
+    : bg.style;
 
   return (
-    <div className="relative h-44 overflow-hidden border-b border-[rgba(200,169,110,0.15)]" style={bg.style}>
-      <svg className="absolute inset-0 w-full h-full opacity-10" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id="hexBanner" x="0" y="0" width="40" height="46" patternUnits="userSpaceOnUse">
-            <polygon points="20,2 38,12 38,34 20,44 2,34 2,12" fill="none" stroke="#C8A96E" strokeWidth="0.5"/>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#hexBanner)" />
-      </svg>
+    <div 
+      className="relative h-44 overflow-hidden border-b border-[rgba(200,169,110,0.15)] group"
+      style={bannerStyle}
+    >
+      {!customPhoto && (
+        <svg className="absolute inset-0 w-full h-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="hexBanner" x="0" y="0" width="40" height="46" patternUnits="userSpaceOnUse">
+              <polygon points="20,2 38,12 38,34 20,44 2,34 2,12" fill="none" stroke="#C8A96E" strokeWidth="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#hexBanner)" />
+        </svg>
+      )}
 
       <div className="absolute inset-0 pointer-events-none">
         {[...Array(8)].map((_, i) => (
@@ -40,16 +92,38 @@ export function ProfileBanner({ bgId, isEditing, onBgChange }: {
       </div>
 
       <div className="absolute top-4 right-5 font-['Space_Mono',monospace] text-[0.6rem] text-[#5A5248]">
-        v3.2 · Season Active
+        {customPhoto ? 'Custom Banner' : 'v3.2 · Season Active'}
       </div>
 
       {isEditing && (
-        <div className="absolute top-4 left-4">
-          <div className="text-[0.6rem] font-['Space_Mono',monospace] text-[#C8A96E] bg-[rgba(5,8,16,0.6)] px-2 py-1 border border-[rgba(200,169,110,0.2)]" style={clipBadge}>
-            ✎ Edit background below
-          </div>
+        <div className="absolute inset-0 bg-[rgba(0,0,0,0.4)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-wider rounded bg-[rgba(200,169,110,0.9)] text-[#050810] hover:bg-[#C8A96E] transition-all disabled:opacity-50"
+            style={clipBadge}
+          >
+            {uploading ? 'Uploading...' : (customPhoto ? 'Change Banner' : 'Upload Banner')}
+          </button>
+          {customPhoto && (
+            <button
+              onClick={handleRemovePhoto}
+              className="px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-wider rounded bg-[rgba(224,92,122,0.9)] text-white hover:bg-[#E05C7A] transition-all"
+              style={clipBadge}
+            >
+              Remove
+            </button>
+          )}
         </div>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleFileUpload}
+        className="hidden"
+      />
 
       <div className="absolute bottom-0 left-0 right-0 h-16"
         style={{ background: 'linear-gradient(to bottom, transparent, #0C1220)' }} />

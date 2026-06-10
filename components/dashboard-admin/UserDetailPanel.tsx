@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { clipBtn, clipBadge } from '@/components/common/clipStyles';
 
 interface UserActivity {
@@ -37,6 +38,19 @@ const BanIcon = () => (
 );
 
 export default function UserDetailPanel({ user, onClose }: UserDetailPanelProps) {
+  const router = useRouter();
+
+  const handleViewFullProfile = () => {
+    router.push(`/HoyoAdmin/user-profile/${user.id}`);
+  };
+
+  const handleBanUser = () => {
+    if (confirm(`Are you sure you want to ban ${user.username}?`)) {
+      // TODO: Implement ban API call
+      alert(`${user.username} has been banned`);
+    }
+  };
+
   const typeColor: Record<string, string> = {
     guide: '#C8A96E',
     event: '#4ECDC4',
@@ -118,24 +132,29 @@ export default function UserDetailPanel({ user, onClose }: UserDetailPanelProps)
       <div className="mb-5">
         <div className="text-[0.65rem] uppercase tracking-[0.12em] text-[#5A5248] mb-2">Recent Reports</div>
         <div className="space-y-1">
-          {user.recentReports.map((r, i) => (
-            <div key={i} className="flex items-center gap-2 py-2 border-b border-[rgba(200,169,110,0.06)] last:border-0">
-              <span
-                className="text-[0.6rem] uppercase px-[6px] py-[2px] border font-bold"
-                style={{ ...clipBadge, color: typeColor[r.type], borderColor: `${typeColor[r.type]}40`, background: `${typeColor[r.type]}10` }}
-              >
-                {r.type}
-              </span>
-              <span className="flex-1 text-[0.72rem] text-[#9A8F78] line-clamp-1">{r.title}</span>
-              <span className="text-[0.65rem] text-[#4ECDC4] font-['Space_Mono',monospace]">↑{r.votes}</span>
-            </div>
-          ))}
+          {user.recentReports.length > 0 ? (
+            user.recentReports.map((r, i) => (
+              <div key={i} className="flex items-center gap-2 py-2 border-b border-[rgba(200,169,110,0.06)] last:border-0">
+                <span
+                  className="text-[0.6rem] uppercase px-[6px] py-[2px] border font-bold"
+                  style={{ ...clipBadge, color: typeColor[r.type] || '#C8A96E', borderColor: `${typeColor[r.type] || '#C8A96E'}40`, background: `${typeColor[r.type] || '#C8A96E'}10` }}
+                >
+                  {r.type}
+                </span>
+                <span className="flex-1 text-[0.72rem] text-[#9A8F78] line-clamp-1">{r.title}</span>
+                <span className="text-[0.65rem] text-[#4ECDC4] font-['Space_Mono',monospace]">↑{r.votes}</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-[0.7rem] text-[#5A5248] text-center py-4">No reports yet</div>
+          )}
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex flex-col gap-2">
         <button
+          onClick={handleViewFullProfile}
           className="w-full py-2 text-[0.75rem] font-bold uppercase tracking-[0.08em] text-[#050810] transition-all hover:brightness-110 font-['Rajdhani',sans-serif]"
           style={{ background: 'linear-gradient(135deg, #8B6A2E, #C8A96E)', ...clipBtn }}
         >
@@ -143,6 +162,7 @@ export default function UserDetailPanel({ user, onClose }: UserDetailPanelProps)
         </button>
         {user.status !== 'banned' && (
           <button
+            onClick={handleBanUser}
             className="w-full py-2 text-[0.75rem] font-bold uppercase tracking-[0.08em] transition-all border border-[rgba(224,92,122,0.4)] text-[#E05C7A] hover:bg-[rgba(224,92,122,0.1)] font-['Rajdhani',sans-serif]"
             style={clipBtn}
           >

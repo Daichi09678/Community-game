@@ -15,4 +15,7 @@ export const users = mysqlTable('users', {
   totalReports: int('total_reports').default(0), // Total laporan yang dibuat user
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+  passwordChangedAt: timestamp('password_changed_at'),
+  
+  
 });

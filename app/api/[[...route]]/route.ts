@@ -1,8 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { db } from '@/lib/db/drizzle';
-import { users, otpCodes, reports } from '@/lib/db/drizzle/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { users, userProfiles, otpCodes, reports, adminActivities } from '../../../lib/db/drizzle/schema';
+import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
@@ -504,7 +504,7 @@ const app = new Elysia({ prefix: '/api' })
   })
   
   // =============================================
-  // SIGN IN - UPDATED WITH ROLE AND REDIRECT
+  // SIGN IN
   // =============================================
   
   .post('/auth/signin', async ({ body, set }) => {
@@ -549,7 +549,6 @@ const app = new Elysia({ prefix: '/api' })
       
       console.log('✅ OTP sent to:', email);
 
-      // Tentukan redirect URL berdasarkan role
       const redirectUrl = user[0].role === 'admin' 
         ? '/HoyoAdmin/dashboard-admin' 
         : '/UserHoyo/dashboard';
@@ -576,7 +575,7 @@ const app = new Elysia({ prefix: '/api' })
   })
 
   // =============================================
-  // VERIFY LOGIN OTP - UPDATED WITH ROLE AND REDIRECT
+  // VERIFY LOGIN OTP
   // =============================================
   
   .post('/auth/verify-login-otp', async ({ body, set, cookie: { token } }) => {
@@ -631,7 +630,6 @@ const app = new Elysia({ prefix: '/api' })
       console.log('✅ Login OTP verified successfully for:', email);
       console.log('👤 User role:', user[0].role);
 
-      // Tentukan redirect URL berdasarkan role
       const redirectUrl = user[0].role === 'admin' 
         ? '/HoyoAdmin/dashboard-admin' 
         : '/UserHoyo/dashboard';
@@ -781,83 +779,84 @@ const app = new Elysia({ prefix: '/api' })
     body: t.Object({ email: t.String({ format: 'email' }) })
   })
 
-  .post('/auth/forget-reset', async ({ body, set, cookie: { token } }) => {
-    try {
-      const { email, code, newPassword } = body as { email: string; code: string; newPassword: string };
-      
-      console.log('🔄 FORGET RESET - Email:', email);
-      
-      const valid = await db.select()
-        .from(otpCodes)
-        .where(
-          and(
-            eq(otpCodes.email, email),
-            eq(otpCodes.code, code),
-            eq(otpCodes.isUsed, true)
-          )
-        );
+ .post('/auth/forget-reset', async ({ body, set, cookie: { token } }) => {
+  try {
+    const { email, code, newPassword } = body as { email: string; code: string; newPassword: string };
+    
+    console.log('🔄 FORGET RESET - Email:', email);
+    
+    const valid = await db.select()
+      .from(otpCodes)
+      .where(
+        and(
+          eq(otpCodes.email, email),
+          eq(otpCodes.code, code),
+          eq(otpCodes.isUsed, true)
+        )
+      );
 
-      if (valid.length === 0) {
-        set.status = 400;
-        return { error: 'Kode OTP tidak valid atau belum diverifikasi' };
-      }
-
-      const user = await db.select().from(users).where(eq(users.email, email));
-      if (user.length === 0) {
-        set.status = 404;
-        return { error: 'User tidak ditemukan' };
-      }
-
-      if (newPassword.length < 8) {
-        set.status = 400;
-        return { error: 'Password minimal 8 karakter' };
-      }
-
-      const hashedPassword = await hashPassword(newPassword);
-      await db.update(users)
-        .set({ 
-          password: hashedPassword,
-          lastLogin: new Date()
-        })
-        .where(eq(users.id, user[0].id));
-
-      await db.delete(otpCodes).where(eq(otpCodes.email, email));
-
-      const jwtToken = await generateToken(user[0].id, user[0].email);
-      token.set({
-        value: jwtToken,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      });
-
-      console.log(`✅ Password reset via OTP untuk user: ${user[0].email}`);
-
-      return {
-        success: true,
-        message: 'Password berhasil direset',
-        user: {
-          id: user[0].id,
-          username: user[0].username,
-          email: user[0].email,
-          rank: user[0].rank,
-          level: user[0].level,
-        }
-      };
-    } catch (error) {
-      console.error('❌ Forget reset error:', error);
-      set.status = 500;
-      return { error: 'Internal server error' };
+    if (valid.length === 0) {
+      set.status = 400;
+      return { error: 'Kode OTP tidak valid atau belum diverifikasi' };
     }
-  }, {
-    body: t.Object({
-      email: t.String({ format: 'email' }),
-      code: t.String({ minLength: 6, maxLength: 6 }),
-      newPassword: t.String({ minLength: 8 })
-    })
+
+    const user = await db.select().from(users).where(eq(users.email, email));
+    if (user.length === 0) {
+      set.status = 404;
+      return { error: 'User tidak ditemukan' };
+    }
+
+    if (newPassword.length < 8) {
+      set.status = 400;
+      return { error: 'Password minimal 8 karakter' };
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    await db.update(users)
+      .set({ 
+        password: hashedPassword,
+        passwordChangedAt: new Date(),
+        lastLogin: new Date()
+      })
+      .where(eq(users.id, user[0].id));
+
+    await db.delete(otpCodes).where(eq(otpCodes.email, email));
+
+    const jwtToken = await generateToken(user[0].id, user[0].email);
+    token.set({
+      value: jwtToken,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+    });
+
+    console.log(`✅ Password reset via OTP untuk user: ${user[0].email}`);
+
+    return {
+      success: true,
+      message: 'Password berhasil direset',
+      user: {
+        id: user[0].id,
+        username: user[0].username,
+        email: user[0].email,
+        rank: user[0].rank,
+        level: user[0].level,
+      }
+    };
+  } catch (error) {
+    console.error('❌ Forget reset error:', error);
+    set.status = 500;
+    return { error: 'Internal server error' };
+  }
+}, {
+  body: t.Object({
+    email: t.String({ format: 'email' }),
+    code: t.String({ minLength: 6, maxLength: 6 }),
+    newPassword: t.String({ minLength: 8 })
   })
+})
   
   .get('/auth/emails', async ({ cookie: { token }, set }) => {
     try {
@@ -907,7 +906,7 @@ const app = new Elysia({ prefix: '/api' })
   })
   
   // =============================================
-  // DASHBOARD ENDPOINTS (sama seperti sebelumnya)
+  // DASHBOARD ENDPOINTS
   // =============================================
   
   .get('/dashboard/stats', async () => {
@@ -935,12 +934,15 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
 
+  // =============================================
+  // POST /dashboard/reports
+  // =============================================
   .post('/dashboard/reports', async ({ body, set }: { body: any; set: any }) => {
     console.log('📝 CREATE REPORT endpoint dipanggil!');
     console.log('Request body:', JSON.stringify(body, null, 2));
     
     try {
-      const { title, type, game, content, userId, severity, version, tags, summary } = body;
+      const { title, type, game, content, userId, version, tags, summary } = body;
       
       console.log('Extracted data:', { title, type, game, userId, contentLength: content?.length });
       
@@ -969,6 +971,13 @@ const app = new Elysia({ prefix: '/api' })
         set.status = 400;
         return { success: false, error: 'Content must be at least 20 characters' };
       }
+
+      const userRecord = await db.select({
+        username: users.username,
+        initials: users.initials,
+      }).from(users).where(eq(users.id, userId));
+
+      const authorInitials = userRecord[0]?.initials || userRecord[0]?.username?.slice(0, 2).toUpperCase() || 'TB';
       
       const reportId = randomUUID();
       const now = new Date();
@@ -982,8 +991,8 @@ const app = new Elysia({ prefix: '/api' })
         game: game,
         content: content,
         userId: userId,
-        severity: severity || 'medium',
-        status: 'published',
+        authorInitials: authorInitials,
+        status: 'draft',
         version: version || '1.0',
         summary: summary || title.slice(0, 100),
         rating: 0,
@@ -991,7 +1000,7 @@ const app = new Elysia({ prefix: '/api' })
         views: 0,
         createdAt: now,
         updatedAt: now,
-      } as any);
+      });
       
       await db.update(users)
         .set({ totalReports: sql`${users.totalReports} + 1` })
@@ -1010,6 +1019,9 @@ const app = new Elysia({ prefix: '/api' })
     }
   })
   
+  // =============================================
+  // GET /dashboard/reports
+  // =============================================
   .get('/dashboard/reports', async ({ query }) => {
     try {
       const { game = 'all', type = 'all', page = '1', limit = '20' } = query;
@@ -1017,26 +1029,61 @@ const app = new Elysia({ prefix: '/api' })
       const limitNum = parseInt(limit as string);
       const offset = (pageNum - 1) * limitNum;
       
-      let whereClause: any = eq(reports.status, 'published');
+      let whereClause: any = sql`${reports.status} IN ('draft', 'published', 'archived')`;
       if (game !== 'all') whereClause = and(whereClause, eq(reports.game, game as any));
       if (type !== 'all') whereClause = and(whereClause, eq(reports.type, type as any));
       
-      const allReports = await db.select().from(reports).where(whereClause).limit(limitNum).offset(offset).orderBy(desc(reports.createdAt));
-      const total = await db.select({ count: sql<number>`count(*)` }).from(reports).where(whereClause);
+      const allReports = await db.select({
+        id: reports.id,
+        title: reports.title,
+        type: reports.type,
+        game: reports.game,
+        version: reports.version,
+        userId: reports.userId,
+        authorInitials: reports.authorInitials,
+        votes: reports.votes,
+        views: reports.views,
+        createdAt: reports.createdAt,
+        summary: reports.summary,
+        status: reports.status,
+      })
+      .from(reports)
+      .where(whereClause)
+      .limit(limitNum)
+      .offset(offset)
+      .orderBy(desc(reports.createdAt));
+      
+      const userIds = allReports.map(r => r.userId).filter(Boolean);
+      let userMap: Record<string, string> = {};
+      
+      for (const uid of userIds) {
+        if (uid && !userMap[uid]) {
+          const user = await db.select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, uid));
+          if (user.length > 0) {
+            userMap[uid] = user[0].username;
+          }
+        }
+      }
+      
+      const total = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(whereClause);
       
       const reportsData = allReports.map(r => ({
         id: r.id,
         title: r.title,
         type: r.type,
         game: r.game,
-        author: 'Traveler',
-        initials: (r as any).authorInitials || 'TB',
-        rating: r.rating,
-        votes: r.votes,
+        authorName: userMap[r.userId as string] || 'Traveler',
+        initials: r.authorInitials || 'TB',
+        rating: 0,
+        votes: r.votes || 0,
         date: formatRelativeDate(r.createdAt),
-        version: r.version,
-        thumbnail: (r as any).thumbnail,
-        summary: (r as any).summary
+        version: r.version || '1.0',
+        summary: r.summary,
+        status: r.status,
       }));
       
       return {
@@ -1053,31 +1100,55 @@ const app = new Elysia({ prefix: '/api' })
       return { success: true, reports: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
     }
   })
-  
+
+  // =============================================
+  // GET /dashboard/reports/:id
+  // =============================================
   .get('/dashboard/reports/:id', async ({ params }: { params: { id: string } }) => {
     try {
       const { id } = params;
       console.log('📖 Fetching report with ID:', id);
       
-      const report = await db.select().from(reports).where(eq(reports.id, id));
+      const report = await db.select({
+        id: reports.id,
+        title: reports.title,
+        type: reports.type,
+        game: reports.game,
+        content: reports.content,
+        status: reports.status,
+        version: reports.version,
+        userId: reports.userId,
+        authorInitials: reports.authorInitials,
+        votes: reports.votes,
+        views: reports.views,
+        rating: reports.rating,
+        summary: reports.summary,
+        createdAt: reports.createdAt,
+        updatedAt: reports.updatedAt,
+      })
+      .from(reports)
+      .where(eq(reports.id, id));
       
       if (report.length === 0) {
         return { success: false, error: 'Report not found' };
       }
       
-      const reportData = report[0] as any;
+      const reportData = report[0];
       
-      const user = await db.select({ 
-        id: users.id,
-        username: users.username 
-      }).from(users).where(eq(users.id, reportData.userId));
+      let username = 'Anonymous';
+      if (reportData.userId) {
+        const user = await db.select({ username: users.username })
+          .from(users)
+          .where(eq(users.id, reportData.userId));
+        if (user.length > 0) username = user[0].username;
+      }
       
       await db.update(reports)
         .set({ views: sql`${reports.views} + 1` })
         .where(eq(reports.id, id));
       
       console.log('✅ Report found:', reportData.title);
-      console.log('👤 User ID:', reportData.userId, 'Username:', user[0]?.username);
+      console.log('👤 User ID:', reportData.userId, 'Username:', username);
       
       return {
         success: true,
@@ -1087,16 +1158,17 @@ const app = new Elysia({ prefix: '/api' })
           type: reportData.type,
           game: reportData.game,
           content: reportData.content,
-          severity: reportData.severity,
           status: reportData.status,
           version: reportData.version,
           userId: reportData.userId,
-          username: user[0]?.username || 'Anonymous',
+          authorName: username,
+          authorInitials: reportData.authorInitials,
+          username: username,
           createdAt: reportData.createdAt,
           updatedAt: reportData.updatedAt,
           views: (reportData.views || 0) + 1,
           votes: reportData.votes || 0,
-          thumbnail: reportData.thumbnail,
+          rating: reportData.rating || 0,
           summary: reportData.summary,
           tags: []
         }
@@ -1130,7 +1202,10 @@ const app = new Elysia({ prefix: '/api' })
       return { success: false };
     }
   })
-  
+
+  // =============================================
+  // DELETE /dashboard/reports/:id
+  // =============================================
   .delete('/dashboard/reports/:id', async ({ params, body }: { params: { id: string }; body: any }) => {
     try {
       const { id } = params;
@@ -1145,7 +1220,7 @@ const app = new Elysia({ prefix: '/api' })
         return { success: false, error: 'Report not found' };
       }
       
-      const reportData = report[0] as any;
+      const reportData = report[0];
       
       if (reportData.userId !== userId) {
         return { success: false, error: 'Unauthorized - You can only delete your own reports' };
@@ -1155,7 +1230,7 @@ const app = new Elysia({ prefix: '/api' })
       
       await db.update(users)
         .set({ totalReports: sql`${users.totalReports} - 1` })
-        .where(eq(users.id, userId));
+        .where(eq(users.id, reportData.userId!));
       
       console.log('✅ Report deleted successfully by owner:', userId);
       
@@ -1294,7 +1369,1885 @@ const app = new Elysia({ prefix: '/api' })
       set.status = 500;
       return { error: 'Internal server error' };
     }
-  });
+  })
+
+  // =============================================
+  // ✅ ADMIN ENDPOINTS
+  // =============================================
+  .get('/admin/users', async ({ cookie: { token }, set }) => {
+    try {
+      console.log('🔐 Admin users endpoint dipanggil');
+      
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const currentUser = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, payload.userId));
+        
+      if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+        set.status = 403;
+        return { error: 'Forbidden - Admin access required' };
+      }
+
+      const allUsers = await db.select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        role: users.role,
+        level: users.level,
+        rank: users.rank,
+        totalReports: users.totalReports,
+        lastLogin: users.lastLogin,
+        createdAt: users.createdAt,
+      }).from(users).orderBy(desc(users.createdAt));
+
+      console.log(`✅ Found ${allUsers.length} users`);
+
+      const usersWithDetails = await Promise.all(allUsers.map(async (userData) => {
+        let recentReports: any[] = [];
+        try {
+          const userReports = await db.select({
+            title: reports.title,
+            type: reports.type,
+            date: reports.createdAt,
+            votes: reports.votes,
+          })
+            .from(reports)
+            .where(eq(reports.userId, userData.id))
+            .orderBy(desc(reports.createdAt))
+            .limit(3);
+
+          recentReports = userReports.map(r => ({
+            title: r.title,
+            type: r.type,
+            date: formatRelativeDate(r.date),
+            votes: r.votes || 0,
+          }));
+        } catch (err) {
+          console.log(`No reports for user ${userData.id}`);
+        }
+
+        let status: 'active' | 'inactive' | 'banned' = 'active';
+        if (userData.lastLogin) {
+          const daysSince = Math.floor((Date.now() - new Date(userData.lastLogin).getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSince > 30) status = 'inactive';
+        } else {
+          status = 'inactive';
+        }
+
+        return {
+          id: userData.id,
+          username: userData.username || userData.email.split('@')[0],
+          email: userData.email,
+          role: userData.role,
+          level: userData.level || 1,
+          rank: userData.rank || 'Novice Omni-Voyager',
+          totalReports: userData.totalReports || 0,
+          joinedAt: formatRelativeDate(userData.createdAt),
+          lastActive: userData.lastLogin ? formatRelativeDate(userData.lastLogin) : 'Never',
+          status,
+          complaints: [],
+          recentReports: recentReports,
+        };
+      }));
+
+      return { success: true, users: usersWithDetails };
+    } catch (error) {
+      console.error('❌ Error fetching admin users:', error);
+      set.status = 500;
+      return { 
+        error: 'Failed to fetch users', 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  })
+
+  .get('/admin/users/:userId', async ({ params: { userId }, cookie: { token }, set }) => {
+    try {
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const currentUser = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, payload.userId));
+      if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+        set.status = 403;
+        return { error: 'Forbidden - Admin access required' };
+      }
+
+      const userData = await db.select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        level: users.level,
+        rank: users.rank,
+        totalReports: users.totalReports,
+        lastLogin: users.lastLogin,
+        createdAt: users.createdAt,
+      }).from(users).where(eq(users.id, userId));
+
+      if (userData.length === 0) {
+        set.status = 404;
+        return { error: 'User not found' };
+      }
+
+      const userInfo = userData[0];
+
+      const userReports = await db.select({
+        id: reports.id,
+        title: reports.title,
+        type: reports.type,
+        game: reports.game,
+        date: reports.createdAt,
+        votes: reports.votes,
+      })
+        .from(reports)
+        .where(eq(reports.userId, userId))
+        .orderBy(desc(reports.createdAt))
+        .limit(10);
+
+      return {
+        success: true,
+        user: {
+          id: userInfo.id,
+          username: userInfo.username || userInfo.email.split('@')[0],
+          email: userInfo.email,
+          level: userInfo.level || 1,
+          rank: userInfo.rank || 'Novice Omni-Voyager',
+          totalReports: userInfo.totalReports || 0,
+          joinedAt: formatRelativeDate(userInfo.createdAt),
+          lastActive: userInfo.lastLogin ? formatRelativeDate(userInfo.lastLogin) : 'Never',
+          complaints: [],
+          recentReports: userReports.map(r => ({
+            id: r.id,
+            title: r.title,
+            type: r.type,
+            game: r.game,
+            date: formatRelativeDate(r.date),
+            votes: r.votes || 0,
+          })),
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching user detail:', error);
+      set.status = 500;
+      return { error: 'Failed to fetch user detail' };
+    }
+  })
+
+  // =============================================
+  // ADMIN STATS ENDPOINT
+  // =============================================
+  .get('/admin/stats', async ({ cookie: { token }, set }) => {
+    try {
+      console.log('📊 Admin stats endpoint dipanggil');
+      
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const currentUser = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, payload.userId));
+        
+      if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+        set.status = 403;
+        return { error: 'Forbidden - Admin access required' };
+      }
+
+      const totalUsers = await db.select({ count: sql<number>`count(*)` }).from(users);
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const activeToday = await db.select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(sql`${users.lastLogin} >= ${oneDayAgo}`);
+      
+      const totalReports = await db.select({ count: sql<number>`count(*)` }).from(reports);
+      const pendingReports = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(eq(reports.status, 'pending'));
+      
+      const topContributors = await db.select({
+          username: users.username,
+          reportCount: users.totalReports,
+        })
+        .from(users)
+        .where(sql`${users.totalReports} > 0`)
+        .orderBy(desc(users.totalReports))
+        .limit(5);
+
+      const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      
+      const userRegistrationTrend = [];
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date();
+        day.setDate(day.getDate() - i);
+        day.setHours(0, 0, 0, 0);
+        const nextDay = new Date(day);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const usersCount = await db.select({ count: sql<number>`count(*)` })
+          .from(users)
+          .where(and(sql`${users.createdAt} >= ${day}`, sql`${users.createdAt} < ${nextDay}`));
+        userRegistrationTrend.push({ date: weekDays[i], users: Number(usersCount[0]?.count) || 0 });
+      }
+
+      const dailyActivity = [];
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date();
+        day.setDate(day.getDate() - i);
+        day.setHours(0, 0, 0, 0);
+        const nextDay = new Date(day);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const reportsCount = await db.select({ count: sql<number>`count(*)` })
+          .from(reports)
+          .where(and(sql`${reports.createdAt} >= ${day}`, sql`${reports.createdAt} < ${nextDay}`));
+        dailyActivity.push({ date: weekDays[i], reports: Number(reportsCount[0]?.count) || 0 });
+      }
+
+      const reportsByGame = await db.select({
+          game: reports.game,
+          count: sql<number>`count(*)`
+        })
+        .from(reports)
+        .where(eq(reports.status, 'published'))
+        .groupBy(reports.game);
+
+      console.log('✅ Admin stats fetched successfully');
+      
+      return {
+        success: true,
+        stats: {
+          totalUsers: Number(totalUsers[0]?.count) || 0,
+          activeToday: Number(activeToday[0]?.count) || 0,
+          totalReports: Number(totalReports[0]?.count) || 0,
+          pendingReports: Number(pendingReports[0]?.count) || 0,
+          totalComplaints: 0,
+          bannedUsers: 0,
+          topContributors: topContributors.map((u, index) => ({
+            rank: index + 1,
+            username: u.username || 'Anonymous',
+            reportCount: u.reportCount || 0,
+          })),
+          userRegistrationTrend: userRegistrationTrend,
+          dailyActivity: dailyActivity,
+          reportsByGame: reportsByGame.map(g => ({
+            game: g.game,
+            count: Number(g.count) || 0,
+          })),
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error fetching admin stats:', error);
+      set.status = 500;
+      return { 
+        error: 'Failed to fetch admin statistics',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  })
+
+ // =============================================
+// POST /admin/reports/:id/review - Accept/Reject Report
+// =============================================
+.post('/admin/reports/:id/review', async ({ params, body, cookie: { token }, set }) => {
+  try {
+    const { id } = params;
+    const { action, note } = body as { action: 'accept' | 'reject'; note?: string };
+    
+    console.log(`📝 Review report ${id} with action: ${action}`);
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const currentUser = await db.select({ role: users.role, username: users.username })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+      
+    if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+      set.status = 403;
+      return { error: 'Forbidden - Admin access required' };
+    }
+
+    // Cek apakah report ada
+    const report = await db.select({
+      id: reports.id,
+      status: reports.status,
+    })
+    .from(reports)
+    .where(eq(reports.id, id));
+    
+    if (report.length === 0) {
+      set.status = 404;
+      return { error: 'Report not found' };
+    }
+
+    // Update status report
+    const newStatus = action === 'accept' ? 'published' : 'archived';
+    
+    await db.update(reports)
+      .set({ 
+        status: newStatus as any,
+        updatedAt: new Date(),
+      })
+      .where(eq(reports.id, id));
+    
+    // ✅ Catat aktivitas admin - TANPA id (auto-increment), gunakan description
+    const actionType = action === 'accept' ? 'REVIEW_ACCEPT' : 'REVIEW_REJECT';
+    const title = action === 'accept' ? `Accepted report: ${report[0].id}` : `Rejected report: ${report[0].id}`;
+    
+    await db.insert(adminActivities).values({
+      adminId: payload.userId,
+      actionType: actionType,
+      title: title,
+      description: note || null,
+      targetType: 'report',
+      targetId: id,
+      createdAt: new Date(),
+    });
+    
+    console.log(`✅ Report ${id} ${action}ed by ${currentUser[0].username}`);
+    
+    return {
+      success: true,
+      message: `Report ${action}ed successfully`,
+      status: newStatus
+    };
+  } catch (error) {
+    console.error('❌ Error reviewing report:', error);
+    set.status = 500;
+    return { error: 'Failed to review report' };
+  }
+}, {
+  body: t.Object({
+    action: t.String(),
+    note: t.Optional(t.String())
+  })
+})
+
+// =============================================
+// PUT /admin/profile/update - Update Admin Profile
+// =============================================
+.put('/admin/profile/update', async ({ body, cookie: { token }, set }) => {
+  try {
+    const { username, bio, location } = body as { username?: string; bio?: string; location?: string };
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const updateData: any = {};
+    if (username) updateData.username = username;
+    if (bio) updateData.bio = bio;
+    if (location) updateData.location = location;
+    
+    await db.update(users)
+      .set(updateData)
+      .where(eq(users.id, payload.userId));
+    
+    // ✅ Catat aktivitas admin - TANPA id (auto-increment)
+    const title = `Updated profile: ${username ? `username changed` : 'profile info updated'}`;
+    await db.insert(adminActivities).values({
+      adminId: payload.userId,
+      actionType: 'PROFILE_UPDATE',
+      title: title,
+      targetType: 'admin',
+      targetId: payload.userId,
+      createdAt: new Date(),
+    });
+    
+    return {
+      success: true,
+      message: 'Profile updated successfully'
+    };
+  } catch (error) {
+    console.error('❌ Error updating profile:', error);
+    set.status = 500;
+    return { error: 'Failed to update profile' };
+  }
+}, {
+  body: t.Object({
+    username: t.Optional(t.String()),
+    bio: t.Optional(t.String()),
+    location: t.Optional(t.String())
+  })
+})
+
+// =============================================
+// GET /admin/profile/activity - Get Admin Activities
+// =============================================
+.get('/admin/profile/activity', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    // Ambil aktivitas dari tabel admin_activities
+    const activities = await db.select({
+      id: adminActivities.id,
+      title: adminActivities.title,
+      actionType: adminActivities.actionType,
+      targetType: adminActivities.targetType,
+      targetId: adminActivities.targetId,
+      createdAt: adminActivities.createdAt,
+    })
+    .from(adminActivities)
+    .where(eq(adminActivities.adminId, payload.userId))
+    .orderBy(desc(adminActivities.createdAt))
+    .limit(10);
+
+    const formattedActivities = activities.map(act => ({
+      id: `ACT${String(act.id).slice(-6)}`,
+      title: act.title,
+      type: act.actionType === 'REVIEW_ACCEPT' ? 'Report Approval' : 
+            act.actionType === 'REVIEW_REJECT' ? 'Report Rejection' : 
+            'Profile Update',
+      tag: act.actionType === 'REVIEW_ACCEPT' ? 'APPROVED' : 
+            act.actionType === 'REVIEW_REJECT' ? 'REJECTED' : 
+            'EDIT',
+      tagColor: act.actionType === 'REVIEW_ACCEPT' ? '#4ECDC4' : 
+                act.actionType === 'REVIEW_REJECT' ? '#E05C7A' : 
+                '#C8A96E',
+      votes: 0,
+      time: formatRelativeDate(act.createdAt),
+    }));
+
+    return { success: true, activities: formattedActivities };
+  } catch (error) {
+    console.error('Error fetching admin activity:', error);
+    return { success: true, activities: [] };
+  }
+})
+
+// =============================================
+// ✅ ENDPOINT: GET /admin/profile/activity-stats - Get Weekly Activity Heatmap for Last 12 Weeks
+// =============================================
+.get('/admin/profile/activity-stats', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    // Hitung tanggal mulai 12 minggu yang lalu (84 hari)
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 84);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Ambil semua aktivitas admin dalam 84 hari terakhir
+    const activities = await db.select({
+      createdAt: adminActivities.createdAt,
+    })
+    .from(adminActivities)
+    .where(
+      and(
+        eq(adminActivities.adminId, payload.userId),
+        sql`${adminActivities.createdAt} >= ${startDate}`
+      )
+    );
+    
+    // Buat heatmap array (84 items, 12 minggu x 7 hari)
+    const heatmap: number[] = new Array(84).fill(0);
+    
+    // Kelompokkan aktivitas per hari
+    const now = new Date();
+    
+    activities.forEach(activity => {
+      let activityDate: Date;
+      if (activity.createdAt instanceof Date) {
+        activityDate = activity.createdAt;
+      } else if (typeof activity.createdAt === 'string') {
+        activityDate = new Date(activity.createdAt);
+      } else if (activity.createdAt === null || activity.createdAt === undefined) {
+        return;
+      } else {
+        activityDate = new Date(activity.createdAt as any);
+      }
+      
+      if (isNaN(activityDate.getTime())) {
+        return;
+      }
+      
+      const daysDiff = Math.floor((now.getTime() - activityDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff >= 0 && daysDiff < 84) {
+        const index = 83 - daysDiff;
+        heatmap[index] = Math.min(heatmap[index] + 1, 4);
+      }
+    });
+    
+    console.log(`📊 Activity heatmap generated: ${activities.length} activities in last 12 weeks`);
+    
+    return { success: true, heatmap };
+  } catch (error) {
+    console.error('Error fetching activity stats:', error);
+    return { success: true, heatmap: new Array(84).fill(0) };
+  }
+})
+
+  // =============================================
+  // MISSION & QUEST ENDPOINTS
+  // =============================================
+  
+  // GET /mission-quest/main-quests
+  .get('/mission-quest/main-quests', async ({ query }) => {
+    console.log('🔥 MAIN QUESTS API DIPANGGIL!');
+    try {
+      const { game = 'all', search = '', page = '1', limit = '20' } = query;
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereClause: any = sql`1=1`;
+      if (game !== 'all') whereClause = sql`${whereClause} AND ${reports.game} = ${game}`;
+      if (search) {
+        whereClause = sql`${whereClause} AND ${reports.title} LIKE ${`%${search}%`}`;
+      }
+
+      const allQuests = await db.select({
+        id: reports.id,
+        title: reports.title,
+        game: reports.game,
+        version: reports.version,
+        chapter: sql`'Chapter I'`.as('chapter'),
+        arc: sql`'Main Arc'`.as('arc'),
+        author: users.username,
+        authorId: reports.userId,
+        initials: reports.authorInitials,
+        rating: reports.rating,
+        votes: reports.votes,
+        views: reports.views,
+        createdAt: reports.createdAt,
+        status: reports.status,
+        tags: sql`'[]'`.as('tags'),
+        summary: reports.summary,
+      })
+      .from(reports)
+      .leftJoin(users, eq(users.id, reports.userId))
+      .where(sql`${whereClause} AND ${reports.type} = 'guide'`)
+      .limit(limitNum)
+      .offset(offset)
+      .orderBy(desc(reports.votes));
+
+      const total = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(sql`${whereClause} AND ${reports.type} = 'guide'`);
+
+      const formattedQuests = allQuests.map(q => ({
+        id: q.id,
+        title: q.title,
+        game: q.game,
+        version: q.version,
+        chapter: q.chapter,
+        arc: q.arc,
+        author: q.author || 'Anonymous',
+        initials: q.initials || 'TB',
+        rating: q.rating || 0,
+        votes: q.votes || 0,
+        date: formatRelativeDate(q.createdAt),
+        status: q.status === 'published' ? 'complete' : 'ongoing',
+        tags: ['Guide', 'Walkthrough'],
+        summary: q.summary || q.title,
+      }));
+
+      return {
+        success: true,
+        quests: formattedQuests,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil((total[0]?.count || 0) / limitNum),
+          totalItems: total[0]?.count || 0,
+        },
+      };
+    } catch (error) {
+      console.error('Error fetching main quests:', error);
+      return { success: true, quests: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+  })
+
+  // GET /mission-quest/side-missions
+  .get('/mission-quest/side-missions', async ({ query }) => {
+    console.log('🔥 SIDE MISSIONS API DIPANGGIL!');
+    try {
+      const { game = 'all', type = 'all', search = '', page = '1', limit = '50' } = query;
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereClause: any = sql`1=1`;
+      if (game !== 'all') whereClause = sql`${whereClause} AND ${reports.game} = ${game}`;
+      if (type !== 'all') whereClause = sql`${whereClause} AND ${reports.type} = ${type}`;
+      if (search) {
+        whereClause = sql`${whereClause} AND ${reports.title} LIKE ${`%${search}%`}`;
+      }
+
+      const allMissions = await db.select({
+        id: reports.id,
+        title: reports.title,
+        game: reports.game,
+        version: reports.version,
+        type: reports.type,
+        difficulty: sql`'normal'`.as('difficulty'),
+        author: users.username,
+        authorId: reports.userId,
+        initials: reports.authorInitials,
+        rating: reports.rating,
+        votes: reports.votes,
+        views: reports.views,
+        createdAt: reports.createdAt,
+        tags: sql`'[]'`.as('tags'),
+        reward: sql`'Various Rewards'`.as('reward'),
+        summary: reports.summary,
+      })
+      .from(reports)
+      .leftJoin(users, eq(users.id, reports.userId))
+      .where(sql`${whereClause} AND ${reports.type} IN ('event', 'puzzle', 'build')`)
+      .limit(limitNum)
+      .offset(offset)
+      .orderBy(desc(reports.votes));
+
+      const total = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(sql`${whereClause} AND ${reports.type} IN ('event', 'puzzle', 'build')`);
+
+      const typeMap: Record<string, string> = {
+        event: 'world',
+        puzzle: 'exploration',
+        build: 'companion',
+      };
+
+      const difficultyMap: Record<string, string> = {
+        event: 'normal',
+        puzzle: 'hard',
+        build: 'easy',
+      };
+
+      const formattedMissions = allMissions.map(m => ({
+        id: m.id,
+        title: m.title,
+        game: m.game,
+        version: m.version,
+        type: typeMap[m.type] || 'world',
+        difficulty: difficultyMap[m.type] || 'normal',
+        author: m.author || 'Anonymous',
+        initials: m.initials || 'TB',
+        rating: m.rating || 0,
+        votes: m.votes || 0,
+        date: formatRelativeDate(m.createdAt),
+        tags: [m.type, 'Guide'],
+        reward: m.reward,
+        summary: m.summary || m.title,
+      }));
+
+      return {
+        success: true,
+        missions: formattedMissions,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil((total[0]?.count || 0) / limitNum),
+          totalItems: total[0]?.count || 0,
+        },
+      };
+    } catch (error) {
+      console.error('Error fetching side missions:', error);
+      return { success: true, missions: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+  })
+
+  // GET /mission-quest/stats
+  .get('/mission-quest/stats', async () => {
+    console.log('🔥 MISSION STATS API DIPANGGIL!');
+    try {
+      const totalMain = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(eq(reports.type, 'guide'));
+      
+      const totalSide = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(sql`${reports.type} IN ('event', 'puzzle', 'build')`);
+      
+      const games = ['hsr', 'gi', 'zzz', 'hi3'];
+      const gameStats = await Promise.all(games.map(async (game) => {
+        const mainCount = await db.select({ count: sql<number>`count(*)` })
+          .from(reports)
+          .where(sql`${reports.game} = ${game} AND ${reports.type} = 'guide'`);
+        
+        const sideCount = await db.select({ count: sql<number>`count(*)` })
+          .from(reports)
+          .where(sql`${reports.game} = ${game} AND ${reports.type} IN ('event', 'puzzle', 'build')`);
+        
+        return { 
+          game, 
+          main: Number(mainCount[0]?.count) || 0, 
+          side: Number(sideCount[0]?.count) || 0 
+        };
+      }));
+
+      const totalMainCount = Number(totalMain[0]?.count) || 0;
+      const totalSideCount = Number(totalSide[0]?.count) || 0;
+      
+      const gameCoverage = {
+        hsr: { 
+          main: totalMainCount > 0 ? Math.round((gameStats.find(g => g.game === 'hsr')?.main || 0) / totalMainCount * 100) : 48, 
+          side: totalSideCount > 0 ? Math.round((gameStats.find(g => g.game === 'hsr')?.side || 0) / totalSideCount * 100) : 52
+        },
+        gi: { 
+          main: totalMainCount > 0 ? Math.round((gameStats.find(g => g.game === 'gi')?.main || 0) / totalMainCount * 100) : 35, 
+          side: totalSideCount > 0 ? Math.round((gameStats.find(g => g.game === 'gi')?.side || 0) / totalSideCount * 100) : 65
+        },
+        zzz: { 
+          main: totalMainCount > 0 ? Math.round((gameStats.find(g => g.game === 'zzz')?.main || 0) / totalMainCount * 100) : 40, 
+          side: totalSideCount > 0 ? Math.round((gameStats.find(g => g.game === 'zzz')?.side || 0) / totalSideCount * 100) : 60
+        },
+        hi3: { 
+          main: totalMainCount > 0 ? Math.round((gameStats.find(g => g.game === 'hi3')?.main || 0) / totalMainCount * 100) : 55, 
+          side: totalSideCount > 0 ? Math.round((gameStats.find(g => g.game === 'hi3')?.side || 0) / totalSideCount * 100) : 45
+        },
+      };
+
+      return {
+        success: true,
+        stats: {
+          totalMainQuests: totalMainCount,
+          totalSideMissions: totalSideCount,
+          byGame: gameStats,
+          gameCoverage: gameCoverage,
+        },
+      };
+    } catch (error) {
+      console.error('Error fetching mission stats:', error);
+      return { 
+        success: true, 
+        stats: { 
+          totalMainQuests: 0, 
+          totalSideMissions: 0, 
+          byGame: [],
+          gameCoverage: {
+            hsr: { main: 48, side: 52 },
+            gi: { main: 35, side: 65 },
+            zzz: { main: 40, side: 60 },
+            hi3: { main: 55, side: 45 },
+          }
+        } 
+      };
+    }
+  })
+
+  // POST /mission-quest/side-missions/:id/like
+  .post('/mission-quest/side-missions/:id/like', async ({ params }) => {
+    try {
+      const { id } = params;
+      await db.update(reports)
+        .set({ votes: sql`${reports.votes} + 1` })
+        .where(eq(reports.id, id));
+      return { success: true };
+    } catch (error) {
+      console.error('Error liking mission:', error);
+      return { success: false };
+    }
+  })
+  
+// =============================================
+// USER PROFILE ENDPOINTS (Current User)
+// =============================================
+
+// GET /profile/me - Get current logged in user profile
+.get('/profile/me', async ({ cookie: { token }, set }) => {
+  try {
+    console.log('🔍 GET /profile/me - Fetching current user profile');
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    console.log('✅ Token valid for user:', payload.userId);
+
+    // Ambil data dari users table
+    const user = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      rank: users.rank,
+      level: users.level,
+      xp: users.xp,
+      initials: users.initials,
+      totalReports: users.totalReports,
+      role: users.role,
+      createdAt: users.createdAt,
+      lastLogin: users.lastLogin,
+    }).from(users).where(eq(users.id, payload.userId));
+    
+    if (user.length === 0) {
+      set.status = 404;
+      return { error: 'User tidak ditemukan' };
+    }
+
+    // Ambil data profile dari userProfiles table
+    let profile = await db.select({
+      bio: userProfiles.bio,
+      location: userProfiles.location,
+      avatarColor: userProfiles.avatarColor,
+      avatarPhoto: userProfiles.avatarPhoto,
+      bannerId: userProfiles.bannerId,
+      bannerPhoto: userProfiles.bannerPhoto,
+      favGames: userProfiles.favGames,
+    }).from(userProfiles).where(eq(userProfiles.userId, payload.userId));
+
+    let profileData = profile[0] || {};
+
+    // Get user's recent reports
+    const userReports = await db.select({
+      id: reports.id,
+      title: reports.title,
+      type: reports.type,
+      game: reports.game,
+      votes: reports.votes,
+      views: reports.views,
+      createdAt: reports.createdAt,
+      status: reports.status,
+    })
+    .from(reports)
+    .where(eq(reports.userId, payload.userId))
+    .orderBy(desc(reports.createdAt))
+    .limit(5);
+
+    // Get user stats per game
+    const gameStats = await db.select({
+      game: reports.game,
+      count: sql<number>`count(*)`,
+      votes: sql<number>`sum(${reports.votes})`,
+    })
+    .from(reports)
+    .where(eq(reports.userId, payload.userId))
+    .groupBy(reports.game);
+
+    const totalVotes = gameStats.reduce((sum, g) => sum + (Number(g.votes) || 0), 0);
+
+    // Parse favGames if exists
+    let favGamesArray: string[] = ['hsr', 'gi'];
+    if (profileData.favGames) {
+      try {
+        favGamesArray = JSON.parse(profileData.favGames);
+      } catch {
+        favGamesArray = ['hsr', 'gi'];
+      }
+    }
+
+    return {
+      success: true,
+      user: {
+        id: user[0].id,
+        username: user[0].username,
+        email: user[0].email,
+        role: user[0].role,
+        rank: user[0].rank || 'Novice Omni-Voyager',
+        level: user[0].level || 1,
+        xp: user[0].xp || 0,
+        initials: user[0].initials || user[0].username?.slice(0, 2).toUpperCase() || 'TB',
+        totalReports: user[0].totalReports || 0,
+        bio: profileData.bio || '',
+        location: profileData.location || '',
+        avatarColor: profileData.avatarColor || '#C8A96E',
+        avatarPhoto: profileData.avatarPhoto || null,
+        bannerId: profileData.bannerId || 'default',
+        bannerPhoto: profileData.bannerPhoto || null,
+        favGames: favGamesArray,
+        createdAt: user[0].createdAt,
+        lastLogin: user[0].lastLogin,
+        totalVotes: totalVotes,
+        gameStats: gameStats.map(g => ({
+          game: g.game,
+          count: Number(g.count) || 0,
+          votes: Number(g.votes) || 0,
+        })),
+        recentReports: userReports.map(r => ({
+          id: r.id,
+          title: r.title,
+          type: r.type,
+          game: r.game,
+          votes: r.votes || 0,
+          date: formatRelativeDate(r.createdAt),
+          status: r.status,
+        })),
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error getting profile:', error);
+    set.status = 500;
+    return { error: 'Internal server error' };
+  }
+})
+
+// PUT /profile/update - Update current user profile
+.put('/profile/update', async ({ body, cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const { username, bio, location, avatarColor, avatarPhoto, bannerId, bannerPhoto, favGames } = body as {
+      username?: string;
+      bio?: string;
+      location?: string;
+      avatarColor?: string;
+      avatarPhoto?: string | null;
+      bannerId?: string;
+      bannerPhoto?: string | null;
+      favGames?: string[];
+    };
+
+    // Update users table
+    const userUpdateData: any = {};
+    if (username !== undefined) {
+      userUpdateData.username = username;
+      userUpdateData.initials = username.slice(0, 2).toUpperCase();
+    }
+
+    if (Object.keys(userUpdateData).length > 0) {
+      await db.update(users)
+        .set(userUpdateData)
+        .where(eq(users.id, payload.userId));
+    }
+
+    // Check if profile exists in userProfiles
+    const existingProfile = await db.select()
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, payload.userId));
+
+    const profileUpdateData: any = {};
+    if (username !== undefined) profileUpdateData.username = username;
+    if (bio !== undefined) profileUpdateData.bio = bio;
+    if (location !== undefined) profileUpdateData.location = location;
+    if (avatarColor !== undefined) profileUpdateData.avatarColor = avatarColor;
+    if (avatarPhoto !== undefined) profileUpdateData.avatarPhoto = avatarPhoto;
+    if (bannerId !== undefined) profileUpdateData.bannerId = bannerId;
+    if (bannerPhoto !== undefined) profileUpdateData.bannerPhoto = bannerPhoto;
+    if (favGames !== undefined) profileUpdateData.favGames = JSON.stringify(favGames);
+    profileUpdateData.updatedAt = new Date();
+
+    if (existingProfile.length === 0) {
+      // Create new profile
+      await db.insert(userProfiles).values({
+        id: randomUUID(),
+        userId: payload.userId,
+        username: username || `Traveler_${payload.userId.slice(0, 8)}`,
+        bio: bio || '',
+        location: location || '',
+        avatarColor: avatarColor || '#C8A96E',
+        avatarPhoto: avatarPhoto || null,
+        bannerId: bannerId || 'default',
+        bannerPhoto: bannerPhoto || null,
+        favGames: favGames ? JSON.stringify(favGames) : JSON.stringify(['hsr', 'gi']),
+        createdAt: new Date(),
+      });
+    } else if (Object.keys(profileUpdateData).length > 0) {
+      // Update existing profile
+      await db.update(userProfiles)
+        .set(profileUpdateData)
+        .where(eq(userProfiles.userId, payload.userId));
+    }
+
+    console.log(`✅ Profile updated for user: ${payload.userId}`);
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+    };
+  } catch (error) {
+    console.error('❌ Error updating profile:', error);
+    set.status = 500;
+    return { error: 'Failed to update profile' };
+  }
+}, {
+  body: t.Object({
+    username: t.Optional(t.String()),
+    bio: t.Optional(t.String()),
+    location: t.Optional(t.String()),
+    avatarColor: t.Optional(t.String()),
+    avatarPhoto: t.Optional(t.Nullable(t.String())),
+    bannerId: t.Optional(t.String()),
+    bannerPhoto: t.Optional(t.Nullable(t.String())),
+    favGames: t.Optional(t.Array(t.String())),
+  })
+})
+
+// POST /profile/banner - Update banner
+.post('/profile/banner', async ({ body, cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const { bannerPhoto, bannerId } = body as { bannerPhoto?: string | null; bannerId?: string };
+
+    // Check if profile exists
+    const existingProfile = await db.select()
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, payload.userId));
+
+    if (existingProfile.length === 0) {
+      // Create profile first
+      await db.insert(userProfiles).values({
+        id: randomUUID(),
+        userId: payload.userId,
+        bannerPhoto: bannerPhoto || null,
+        bannerId: bannerId || (bannerPhoto ? 'custom' : 'default'),
+        createdAt: new Date(),
+      });
+    } else {
+      const updateData: any = {};
+      if (bannerPhoto !== undefined) {
+        updateData.bannerPhoto = bannerPhoto;
+        updateData.bannerId = bannerPhoto ? 'custom' : 'default';
+      } else if (bannerId !== undefined) {
+        updateData.bannerId = bannerId;
+        if (bannerId !== 'custom') {
+          updateData.bannerPhoto = null;
+        }
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        await db.update(userProfiles)
+          .set(updateData)
+          .where(eq(userProfiles.userId, payload.userId));
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Banner updated successfully',
+    };
+  } catch (error) {
+    console.error('Error updating banner:', error);
+    set.status = 500;
+    return { error: 'Failed to update banner' };
+  }
+}, {
+  body: t.Object({
+    bannerPhoto: t.Optional(t.Nullable(t.String())),
+    bannerId: t.Optional(t.String()),
+  })
+})
+
+// PUT /user/profile - Update user profile
+.put('/user/profile', async ({ body, cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const { username, bio, location, avatarColor, avatarPhoto, bannerId, bannerPhoto, favGames } = body as {
+      username?: string;
+      bio?: string;
+      location?: string;
+      avatarColor?: string;
+      avatarPhoto?: string | null;
+      bannerId?: string;
+      bannerPhoto?: string | null;
+      favGames?: string[];
+    };
+
+    // UPDATE users table
+    const userUpdateData: any = {};
+    if (username !== undefined) {
+      // Cek apakah username sudah dipakai user lain
+      const existingUser = await db.select()
+        .from(users)
+        .where(eq(users.username, username));
+      
+      if (existingUser.length > 0 && existingUser[0].id !== payload.userId) {
+        set.status = 400;
+        return { error: 'Username already taken' };
+      }
+      userUpdateData.username = username;
+      userUpdateData.initials = username.slice(0, 2).toUpperCase();
+    }
+
+    if (Object.keys(userUpdateData).length > 0) {
+      await db.update(users)
+        .set(userUpdateData)
+        .where(eq(users.id, payload.userId));
+    }
+
+    // UPDATE or INSERT userProfiles table
+    const existingProfile = await db.select({ id: userProfiles.id })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, payload.userId));
+
+    const profileUpdateData: any = {};
+    if (username !== undefined) profileUpdateData.username = username;
+    if (bio !== undefined) profileUpdateData.bio = bio;
+    if (location !== undefined) profileUpdateData.location = location;
+    if (avatarColor !== undefined) profileUpdateData.avatarColor = avatarColor;
+    if (avatarPhoto !== undefined) profileUpdateData.avatarPhoto = avatarPhoto;
+    if (bannerId !== undefined) profileUpdateData.bannerId = bannerId;
+    if (bannerPhoto !== undefined) profileUpdateData.bannerPhoto = bannerPhoto;
+    if (favGames !== undefined) profileUpdateData.favGames = JSON.stringify(favGames);
+    profileUpdateData.updatedAt = new Date();
+
+    if (existingProfile.length === 0) {
+      // Create new profile
+      await db.insert(userProfiles).values({
+        id: randomUUID(),
+        userId: payload.userId,
+        username: username || null,
+        bio: bio || null,
+        location: location || null,
+        avatarColor: avatarColor || '#C8A96E',
+        avatarPhoto: avatarPhoto || null,
+        bannerId: bannerId || 'default',
+        bannerPhoto: bannerPhoto || null,
+        favGames: favGames ? JSON.stringify(favGames) : JSON.stringify(['hsr', 'gi']),
+        createdAt: new Date(),
+      });
+    } else if (Object.keys(profileUpdateData).length > 0) {
+      // Update existing profile
+      await db.update(userProfiles)
+        .set(profileUpdateData)
+        .where(eq(userProfiles.userId, payload.userId));
+    }
+
+    console.log(`✅ Profile updated: username=${username}, bio=${bio}, location=${location}`);
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+    };
+  } catch (error) {
+    console.error('❌ Error updating profile:', error);
+    set.status = 500;
+    return { error: 'Failed to update profile' };
+  }
+}, {
+  body: t.Object({
+    username: t.Optional(t.String()),
+    bio: t.Optional(t.String()),
+    location: t.Optional(t.String()),
+    avatarColor: t.Optional(t.String()),
+    avatarPhoto: t.Optional(t.Nullable(t.String())),
+    bannerId: t.Optional(t.String()),
+    bannerPhoto: t.Optional(t.Nullable(t.String())),
+    favGames: t.Optional(t.Array(t.String())),
+  })
+})
+
+
+// GET /user/recent-activity - Versi aman
+.get('/user/recent-activity', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const userReports = await db.select({
+      id: reports.id,
+      title: reports.title,
+      type: reports.type,
+      game: reports.game,
+      votes: reports.votes,
+      createdAt: reports.createdAt,
+      status: reports.status,
+    })
+    .from(reports)
+    .where(eq(reports.userId, payload.userId))
+    .orderBy(desc(reports.createdAt))
+    .limit(10);
+
+    const activities = userReports.map((r, index) => {
+      let shortId = '';
+      try {
+        shortId = String(r.id).slice(0, 6);
+      } catch {
+        shortId = String(index + 1).padStart(3, '0');
+      }
+      
+      // Determine the display type based on report type
+      let displayType: string;
+      switch (r.type) {
+        case 'guide':
+          displayType = 'Main Quest Guide';
+          break;
+        case 'event':
+          displayType = 'Event Guide';
+          break;
+        case 'puzzle':
+          displayType = 'Puzzle Solution';
+          break;
+        case 'build':
+          displayType = 'Build Guide';
+          break;
+        case 'mission':
+          displayType = 'Mission Guide';
+          break;
+        case 'analysis':
+          displayType = 'Analysis Report';
+          break;
+        default:
+          displayType = 'Report';
+      }
+      
+      return {
+        id: `REP${shortId}`,
+        title: r.title || 'Untitled',
+        type: displayType,
+        tag: r.status === 'published' ? 'PUBLISHED' : 'DRAFT',
+        tagColor: r.status === 'published' ? '#4ECDC4' : '#CBA96E',
+        votes: r.votes || 0,
+        time: formatRelativeDate(r.createdAt),
+      };
+    });
+
+    return { success: true, activities };
+  } catch (error) {
+    console.error('Error fetching user activities:', error);
+    return { success: true, activities: [] };
+  }
+})
+
+
+// GET /api/user/game-stats
+.get('/user/game-stats', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const gameStats = await db.select({
+      game: reports.game,
+      count: sql<number>`count(*)`,
+      votes: sql<number>`sum(${reports.votes})`,
+    })
+    .from(reports)
+    .where(eq(reports.userId, payload.userId))
+    .groupBy(reports.game);
+
+    return {
+      success: true,
+      stats: gameStats.map(g => ({
+        game: g.game,
+        count: Number(g.count) || 0,
+        votes: Number(g.votes) || 0,
+      }))
+    };
+  } catch (error) {
+    console.error('Error fetching game stats:', error);
+    return { success: true, stats: [] };
+  }
+})
+
+
+  // =============================================
+  // EVENT SEASONAL ENDPOINTS
+  // =============================================
+
+  // GET /events - Get all event reports
+  .get('/events', async ({ query, set }: any) => {
+    try {
+      const { 
+        game = 'all', 
+        page = '1', 
+        limit = '20',
+        search = ''
+      } = query;
+      
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
+      const offset = (pageNum - 1) * limitNum;
+      
+      let whereClause: any = sql`${reports.type} = 'event'`;
+      
+      if (game !== 'all') whereClause = and(whereClause, eq(reports.game, game));
+      if (search) whereClause = and(whereClause, sql`${reports.title} LIKE ${`%${search}%`}`);
+      
+      const allEvents = await db.select({
+        id: reports.id,
+        title: reports.title,
+        type: reports.type,
+        game: reports.game,
+        version: reports.version,
+        userId: reports.userId,
+        authorInitials: reports.authorInitials,
+        votes: reports.votes,
+        views: reports.views,
+        createdAt: reports.createdAt,
+        summary: reports.summary,
+        content: reports.content,
+        status: reports.status,
+      })
+      .from(reports)
+      .where(whereClause)
+      .limit(limitNum)
+      .offset(offset)
+      .orderBy(desc(reports.createdAt));
+      
+      const userIds = allEvents.map(r => r.userId).filter(Boolean);
+      let userMap: Record<string, string> = {};
+      
+      for (const uid of userIds) {
+        if (uid && !userMap[uid]) {
+          const user = await db.select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, uid));
+          if (user.length > 0) {
+            userMap[uid] = user[0].username;
+          }
+        }
+      }
+      
+      const total = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(whereClause);
+      
+      const formattedEvents = allEvents.map((event: any) => ({
+        id: event.id,
+        title: event.title,
+        game: event.game,
+        status: event.status || 'pending',
+        category: 'limited',
+        startDate: new Date(event.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        endDate: 'N/A',
+        rewards: [],
+        description: event.summary || event.title,
+        tag: event.type,
+        featured: false,
+        authorName: userMap[event.userId as string] || 'Traveler',
+        authorInitials: event.authorInitials || 'TB',
+        votes: event.votes || 0,
+        views: event.views || 0,
+        content: event.content,
+        createdAt: event.createdAt,
+      }));
+      
+      return {
+        success: true,
+        events: formattedEvents,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil((total[0]?.count || 0) / limitNum),
+          totalItems: total[0]?.count || 0,
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      return { success: true, events: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+  })
+
+  // GET /events/pending - Get pending event reports for admin approval
+  .get('/events/pending', async ({ query, cookie: { token }, set }: any) => {
+    try {
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const currentUser = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, payload.userId));
+        
+      if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+        set.status = 403;
+        return { error: 'Forbidden - Admin access required' };
+      }
+
+      const { game = 'all', page = '1', limit = '20', search = '' } = query;
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
+      const offset = (pageNum - 1) * limitNum;
+      
+      let whereClause: any = sql`${reports.status} = 'pending' AND ${reports.type} = 'event'`;
+      
+      if (game !== 'all') whereClause = and(whereClause, eq(reports.game, game));
+      if (search) whereClause = and(whereClause, sql`${reports.title} LIKE ${`%${search}%`}`);
+      
+      const pendingEvents = await db.select({
+        id: reports.id,
+        title: reports.title,
+        type: reports.type,
+        game: reports.game,
+        version: reports.version,
+        userId: reports.userId,
+        authorInitials: reports.authorInitials,
+        votes: reports.votes,
+        views: reports.views,
+        createdAt: reports.createdAt,
+        summary: reports.summary,
+        content: reports.content,
+        status: reports.status,
+      })
+      .from(reports)
+      .where(whereClause)
+      .limit(limitNum)
+      .offset(offset)
+      .orderBy(desc(reports.createdAt));
+      
+      const userIds = pendingEvents.map(r => r.userId).filter(Boolean);
+      let userMap: Record<string, string> = {};
+      
+      for (const uid of userIds) {
+        if (uid && !userMap[uid]) {
+          const user = await db.select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, uid));
+          if (user.length > 0) {
+            userMap[uid] = user[0].username;
+          }
+        }
+      }
+      
+      const total = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(whereClause);
+      
+      const formattedEvents = pendingEvents.map((event: any) => ({
+        id: event.id,
+        title: event.title,
+        game: event.game,
+        status: 'pending',
+        category: 'limited',
+        createdAt: event.createdAt,
+        description: event.summary || event.title,
+        tag: event.type,
+        authorName: userMap[event.userId as string] || 'Traveler',
+        authorInitials: event.authorInitials || 'TB',
+        votes: event.votes || 0,
+        views: event.views || 0,
+        content: event.content,
+      }));
+      
+      return {
+        success: true,
+        events: formattedEvents,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil((total[0]?.count || 0) / limitNum),
+          totalItems: total[0]?.count || 0,
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching pending events:', error);
+      return { success: true, events: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+  })
+
+  // POST /events/:id/approve - Approve an event report
+  .post('/events/:id/approve', async ({ params, cookie: { token }, set }: any) => {
+    try {
+      const { id } = params;
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const currentUser = await db.select({ role: users.role, username: users.username })
+        .from(users)
+        .where(eq(users.id, payload.userId));
+        
+      if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+        set.status = 403;
+        return { error: 'Forbidden - Admin access required' };
+      }
+
+      const report = await db.select({
+        id: reports.id,
+        status: reports.status,
+        type: reports.type,
+      })
+      .from(reports)
+      .where(and(eq(reports.id, id), eq(reports.type, 'event')));
+      
+      if (report.length === 0) {
+        set.status = 404;
+        return { error: 'Event report not found' };
+      }
+
+      if (report[0].status !== 'pending') {
+        set.status = 400;
+        return { error: 'Event report is not pending approval' };
+      }
+
+      await db.update(reports)
+        .set({ 
+          status: 'published',
+          updatedAt: new Date(),
+        })
+        .where(eq(reports.id, id));
+      
+      // Catat aktivitas admin - TANPA id (auto-increment)
+      await db.insert(adminActivities).values({
+        adminId: payload.userId,
+        actionType: 'EVENT_APPROVE',
+        title: `Approved event report: ${id}`,
+        targetType: 'report',
+        targetId: id,
+        createdAt: new Date(),
+      });
+      
+      console.log(`✅ Event report ${id} approved by ${currentUser[0].username}`);
+      
+      return {
+        success: true,
+        message: 'Event report approved successfully',
+        status: 'published'
+      };
+    } catch (error) {
+      console.error('Error approving event:', error);
+      set.status = 500;
+      return { error: 'Failed to approve event' };
+    }
+  })
+
+  // POST /events/:id/reject - Reject an event report
+  .post('/events/:id/reject', async ({ params, body, cookie: { token }, set }: any) => {
+    try {
+      const { id } = params;
+      const { note } = body as { note?: string };
+      const tokenValue = token.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const currentUser = await db.select({ role: users.role, username: users.username })
+        .from(users)
+        .where(eq(users.id, payload.userId));
+        
+      if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+        set.status = 403;
+        return { error: 'Forbidden - Admin access required' };
+      }
+
+      const report = await db.select({
+        id: reports.id,
+        status: reports.status,
+        type: reports.type,
+      })
+      .from(reports)
+      .where(and(eq(reports.id, id), eq(reports.type, 'event')));
+      
+      if (report.length === 0) {
+        set.status = 404;
+        return { error: 'Event report not found' };
+      }
+
+      if (report[0].status !== 'pending') {
+        set.status = 400;
+        return { error: 'Event report is not pending approval' };
+      }
+
+      await db.update(reports)
+        .set({ 
+          status: 'archived',
+          updatedAt: new Date(),
+        })
+        .where(eq(reports.id, id));
+      
+      // Catat aktivitas admin - TANPA id (auto-increment), gunakan description
+      await db.insert(adminActivities).values({
+        adminId: payload.userId,
+        actionType: 'EVENT_REJECT',
+        title: `Rejected event report: ${id}`,
+        description: note || null,
+        targetType: 'report',
+        targetId: id,
+        createdAt: new Date(),
+      });
+      
+      console.log(`✅ Event report ${id} rejected by ${currentUser[0].username}`);
+      
+      return {
+        success: true,
+        message: 'Event report rejected successfully',
+        status: 'archived'
+      };
+    } catch (error) {
+      console.error('Error rejecting event:', error);
+      set.status = 500;
+      return { error: 'Failed to reject event' };
+    }
+  })
+
+  // GET /events/stats - Get event statistics
+  .get('/events/stats', async ({ set }: any) => {
+    try {
+      const total = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(and(eq(reports.status, 'published'), eq(reports.type, 'event')));
+      
+      const pending = await db.select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(and(eq(reports.status, 'pending'), eq(reports.type, 'event')));
+      
+      const byGame = await db.select({
+        game: reports.game,
+        count: sql<number>`count(*)`,
+      })
+      .from(reports)
+      .where(and(eq(reports.status, 'published'), eq(reports.type, 'event')))
+      .groupBy(reports.game);
+      
+      return {
+        success: true,
+        stats: {
+          total: Number(total[0]?.count) || 0,
+          pending: Number(pending[0]?.count) || 0,
+          byGame: byGame.map((g: any) => ({
+            game: g.game,
+            count: Number(g.count) || 0,
+          })),
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching event stats:', error);
+      return { success: true, stats: { total: 0, pending: 0, byGame: [] } };
+    }
+  })
+
+  // GET /events/:id - Get single event report
+  .get('/events/:id', async ({ params, set }: any) => {
+    try {
+      const { id } = params;
+      
+      const event = await db.select({
+        id: reports.id,
+        title: reports.title,
+        type: reports.type,
+        game: reports.game,
+        content: reports.content,
+        status: reports.status,
+        version: reports.version,
+        userId: reports.userId,
+        authorInitials: reports.authorInitials,
+        votes: reports.votes,
+        views: reports.views,
+        rating: reports.rating,
+        summary: reports.summary,
+        createdAt: reports.createdAt,
+        updatedAt: reports.updatedAt,
+      })
+      .from(reports)
+      .where(and(eq(reports.id, id), eq(reports.type, 'event')))
+      .limit(1);
+      
+      if (event.length === 0) {
+        set.status = 404;
+        return { error: 'Event not found' };
+      }
+      
+      const eventData = event[0];
+      
+      let username = 'Anonymous';
+      if (eventData.userId) {
+        const user = await db.select({ username: users.username })
+          .from(users)
+          .where(eq(users.id, eventData.userId));
+        if (user.length > 0) username = user[0].username;
+      }
+      
+      return {
+        success: true,
+        event: {
+          id: eventData.id,
+          title: eventData.title,
+          type: eventData.type,
+          game: eventData.game,
+          content: eventData.content,
+          status: eventData.status,
+          version: eventData.version,
+          authorName: username,
+          authorInitials: eventData.authorInitials,
+          votes: eventData.votes || 0,
+          views: eventData.views || 0,
+          summary: eventData.summary,
+          createdAt: eventData.createdAt,
+          updatedAt: eventData.updatedAt,
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      set.status = 500;
+      return { error: 'Failed to fetch event' };
+    }
+  })
+
+  // POST /events/:id/like - Like an event report
+  .post('/events/:id/like', async ({ params }: any) => {
+    try {
+      const { id } = params;
+      await db.update(reports)
+        .set({ votes: sql`${reports.votes} + 1` })
+        .where(and(eq(reports.id, id), eq(reports.type, 'event')));
+      return { success: true };
+    } catch (error) {
+      console.error('Error liking event:', error);
+      return { success: false };
+    }
+  })
+
+  // GET /user/password-last-changed - Get last password change timestamp
+  .get('/user/password-last-changed', async ({ cookie, set }: { cookie: { token?: { value?: string } }; set: any }) => {
+    try {
+      const tokenValue = cookie.token?.value;
+      if (!tokenValue || typeof tokenValue !== 'string') {
+        set.status = 401;
+        return { error: 'Unauthorized' };
+      }
+
+      const payload = await verifyToken(tokenValue);
+      if (!payload) {
+        set.status = 401;
+        return { error: 'Invalid token' };
+      }
+
+      const user = await db.select({
+        passwordChangedAt: users.passwordChangedAt,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+
+      if (user.length === 0) {
+        set.status = 404;
+        return { error: 'User not found' };
+      }
+
+      const lastChanged = user[0].passwordChangedAt || user[0].createdAt;
+      
+      return {
+        success: true,
+        lastChanged: lastChanged ? lastChanged.toISOString() : null,
+      };
+    } catch (error) {
+      console.error('Error fetching password last changed:', error);
+      set.status = 500;
+      return { error: 'Failed to fetch data' };
+    }
+  })
 
 // =============================================
 // EXPORT UNTUK NEXT.JS

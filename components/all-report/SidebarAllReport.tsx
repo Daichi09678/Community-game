@@ -3,14 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { subscribeToReportStats, fetchReportStats } from '@/lib/reportStats';
 
 // ─── CLIP-PATH STYLE OBJECTS ─────────────────────────────────────────────────
 const clipHex = { clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' } as React.CSSProperties;
 const clipBadge = { clipPath: 'polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%)' } as React.CSSProperties;
 
-// ─── ICON COMPONENTS (sama seperti sebelumnya) ───────────────────────────────
+// ─── ICON COMPONENTS ─────────────────────────────────────────────────────────
 const GridIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <rect x="1" y="1" width="6" height="6" stroke="currentColor" strokeWidth="1.2" rx="1"/>
@@ -165,38 +164,19 @@ export function SidebarAllReport() {
     totalReports: number;
   } | null>(null);
   const [totalReports, setTotalReports] = useState(0);
+  const [categoryCounts, setCategoryCounts] = useState({
+    guide: 0,
+    event: 0,
+    puzzle: 0,
+    build: 0,
+  });
   const [loading, setLoading] = useState(true);
-
-  // Ambil total report count dari endpoint yang sudah ada
-  const fetchTotalReports = async () => {
-    try {
-      // Gunakan endpoint /dashboard/reports yang sudah ada
-      const response = await fetch(`${API_BASE_URL}/api/dashboard/reports?page=1&limit=1`);
-      console.log('Fetching total reports, response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Data received:', data);
-        
-        // Ambil totalItems dari pagination
-        if (data.pagination && typeof data.pagination.totalItems === 'number') {
-          const total = data.pagination.totalItems;
-          setTotalReports(total);
-          console.log('Total reports set to:', total);
-        } else {
-          console.log('No pagination.totalItems found in response');
-        }
-      } else {
-        console.log('Response not OK:', response.status);
-      }
-    } catch (error) {
-      console.error('Error fetching total reports:', error);
-    }
-  };
+  const [avatarPhoto, setAvatarPhoto] = useState<string | null>(null);
+  const [bannerPhoto, setBannerPhoto] = useState<string | null>(null);
 
   const fetchUser = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      const response = await fetch('/api/auth/me', {
         credentials: 'include',
         headers: { 'Cache-Control': 'no-cache' }
       });
@@ -215,22 +195,37 @@ export function SidebarAllReport() {
         };
         setUser(userData);
         localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Load avatar
+        if (data.avatarPhoto) {
+          setAvatarPhoto(data.avatarPhoto);
+          localStorage.setItem('userAvatar', data.avatarPhoto);
+        } else {
+          const savedAvatar = localStorage.getItem('userAvatar');
+          if (savedAvatar) setAvatarPhoto(savedAvatar);
+        }
+        
+        // Load banner
+        if (data.bannerPhoto) {
+          setBannerPhoto(data.bannerPhoto);
+          localStorage.setItem('userBanner', data.bannerPhoto);
+        } else {
+          const savedBanner = localStorage.getItem('userBanner');
+          if (savedBanner) setBannerPhoto(savedBanner);
+        }
       } else {
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
           setUser(JSON.parse(savedUser));
         } else {
-          setUser({
-            id: 'guest',
-            username: 'Guest',
-            email: 'guest@triablazer.com',
-            rank: 'Novice Omni-Voyager',
-            level: 1,
-            xp: 0,
-            initials: 'GT',
-            totalReports: 0
-          });
+          window.location.href = '/Sign-in';
+          return;
         }
+        
+        const savedAvatar = localStorage.getItem('userAvatar');
+        if (savedAvatar) setAvatarPhoto(savedAvatar);
+        const savedBanner = localStorage.getItem('userBanner');
+        if (savedBanner) setBannerPhoto(savedBanner);
       }
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -238,48 +233,63 @@ export function SidebarAllReport() {
       if (savedUser) {
         setUser(JSON.parse(savedUser));
       } else {
-        setUser({
-          id: 'guest',
-          username: 'Guest',
-          email: 'guest@triablazer.com',
-          rank: 'Novice Omni-Voyager',
-          level: 1,
-          xp: 0,
-          initials: 'GT',
-          totalReports: 0
-        });
+        window.location.href = '/Sign-in';
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // Listen for profile updates
   useEffect(() => {
-    fetchTotalReports();
-    fetchUser();
-    
-    // Refresh setiap 15 detik
-    const interval = setInterval(fetchTotalReports, 15000);
-    
-    // Listen untuk refresh dari komponen lain
-    const handleRefresh = () => {
-      console.log('Refresh triggered from event');
-      fetchTotalReports();
+    const handleProfileUpdate = () => {
+      console.log('Profile updated, refreshing sidebar user data...');
       fetchUser();
     };
     
-    window.addEventListener('refreshAllReportStats', handleRefresh);
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    window.addEventListener('adminProfileUpdated', handleProfileUpdate);
     
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('refreshAllReportStats', handleRefresh);
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+      window.removeEventListener('adminProfileUpdated', handleProfileUpdate);
     };
   }, []);
 
-  // Format number (1247 -> 1.2K)
+  useEffect(() => {
+    // Subscribe ke global report stats
+    const unsubscribe = subscribeToReportStats((stats) => {
+      console.log('📊 SidebarAllReport received stats:', stats);
+      setTotalReports(stats.totalReports);
+      setCategoryCounts(stats.categoryCounts);
+    });
+    
+    fetchUser();
+    fetchReportStats();
+    
+    const handleRefresh = () => {
+      fetchReportStats();
+      fetchUser();
+    };
+    
+    window.addEventListener('refreshSidebarStats', handleRefresh);
+    window.addEventListener('reportCreated', handleRefresh);
+    window.addEventListener('reportDeleted', handleRefresh);
+    
+    return () => {
+      unsubscribe();
+      window.removeEventListener('refreshSidebarStats', handleRefresh);
+      window.removeEventListener('reportCreated', handleRefresh);
+      window.removeEventListener('reportDeleted', handleRefresh);
+    };
+  }, []);
+
+  // Format number
   const formattedTotal = totalReports >= 1000 
     ? `${(totalReports / 1000).toFixed(1)}K` 
     : totalReports.toString();
+
+  const formatCount = (count: number) => count.toString();
 
   // Hitung XP progress
   const currentLevelXP = user ? (user.level - 1) * 100 : 0;
@@ -311,25 +321,70 @@ export function SidebarAllReport() {
 
   return (
     <aside className="w-[260px] shrink-0 bg-[#0C1220] border-r border-[rgba(200,169,110,0.15)] flex flex-col fixed top-0 bottom-0 left-0 z-50 overflow-y-auto">
-      {/* Logo */}
-      <div className="px-6 py-7 border-b border-[rgba(200,169,110,0.15)]">
-        <Link href="/UserHoyo/dashboard" className="flex items-center gap-[10px] font-['Cinzel',serif] text-[0.95rem] font-bold text-[#C8A96E] no-underline">
-          <svg width="28" height="28" viewBox="0 0 28 28">
-            <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#C8A96E" strokeWidth="1.2"/>
-            <circle cx="14" cy="14" r="3.5" fill="rgba(200,169,110,0.3)" stroke="#C8A96E" strokeWidth="0.8"/>
-            <line x1="14" y1="8" x2="14" y2="10.5" stroke="#C8A96E" strokeWidth="0.8"/>
-            <line x1="14" y1="17.5" x2="14" y2="20" stroke="#C8A96E" strokeWidth="0.8"/>
-            <line x1="8" y1="14" x2="10.5" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
-            <line x1="17.5" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
-          </svg>
-          Hoyoverse Hub
-        </Link>
+      {/* Header dengan Banner Background seperti Admin Sidebar */}
+      <div className="relative">
+        {/* Banner Background */}
+        <div 
+          className="h-[100px] w-full relative overflow-hidden"
+          style={{ 
+            background: bannerPhoto 
+              ? `url(${bannerPhoto}) center/cover no-repeat` 
+              : 'linear-gradient(135deg, #0a0f1e 0%, #1a0a2e 40%, #0a1a20 100%)'
+          }}
+        >
+          {/* Stars effect (only when no custom banner) */}
+          {!bannerPhoto && Array.from({ length: 15 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full bg-white"
+              style={{
+                width: i % 3 === 0 ? '2px' : '1px',
+                height: i % 3 === 0 ? '2px' : '1px',
+                top: `${10 + (i * 17) % 80}%`,
+                left: `${5 + (i * 23) % 90}%`,
+                opacity: 0.1 + (i % 5) * 0.08,
+              }}
+            />
+          ))}
+          
+          {/* Overlay gradient for better text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0C1220] via-transparent to-transparent" />
+        </div>
+        
+        {/* Logo - positioned inside banner area */}
+        <div className="absolute bottom-3 left-5 z-10">
+          <Link href="/UserHoyo/dashboard" className="flex items-center gap-[10px] font-['Cinzel',serif] text-[0.95rem] font-bold text-[#C8A96E] no-underline">
+            <svg width="28" height="28" viewBox="0 0 28 28">
+              <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#C8A96E" strokeWidth="1.2"/>
+              <circle cx="14" cy="14" r="3.5" fill="rgba(200,169,110,0.3)" stroke="#C8A96E" strokeWidth="0.8"/>
+              <line x1="14" y1="8" x2="14" y2="10.5" stroke="#C8A96E" strokeWidth="0.8"/>
+              <line x1="14" y1="17.5" x2="14" y2="20" stroke="#C8A96E" strokeWidth="0.8"/>
+              <line x1="8" y1="14" x2="10.5" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
+              <line x1="17.5" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
+            </svg>
+            Hoyoverse Hub
+          </Link>
+        </div>
+        
+        {/* USER ACCESS badge */}
+        <div className="absolute bottom-3 right-5 z-10">
+          <div
+            className="text-[0.55rem] font-['Space_Mono',monospace] tracking-[0.15em] px-2 py-[2px] border"
+            style={{ ...clipBadge, color: '#4ECDC4', borderColor: 'rgba(78,205,196,0.4)', background: 'rgba(78,205,196,0.08)' }}
+          >
+            ● USER
+          </div>
+        </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-5">
         <NavGroupLabel>Main</NavGroupLabel>
-        <NavItem href="/UserHoyo/dashboard" icon={<GridIcon />} label="Dashboard" />
+        <NavItem 
+          href="/UserHoyo/dashboard" 
+          icon={<GridIcon />} 
+          label="Dashboard" 
+        />
         <NavItem 
           href="/UserHoyo/all-report" 
           icon={<HexIcon />} 
@@ -338,9 +393,25 @@ export function SidebarAllReport() {
         />
 
         <NavGroupLabel>Category</NavGroupLabel>
-        <NavItem href="/UserHoyo/mission&quest" icon={<HexDotIcon />} label="Mission & Quest" badge="482" />
-        <NavItem href="/UserHoyo/event" icon={<CalendarIcon />} label="Event Seasonal" isNew />
-        <NavItem href="/UserHoyo/puzzle" icon={<DiamondIcon />} label="Puzzle & Riddles" badge="324" />
+        <NavItem 
+          href="/UserHoyo/mission&quest" 
+          icon={<HexDotIcon />} 
+          label="Mission &amp; Quest" 
+          badge={formatCount(categoryCounts.guide)} 
+        />
+        <NavItem 
+          href="/UserHoyo/event" 
+          icon={<CalendarIcon />} 
+          label="Event Seasonal" 
+          badge={formatCount(categoryCounts.event)} 
+          isNew={categoryCounts.event > 0}
+        />
+        <NavItem 
+          href="/UserHoyo/puzzle" 
+          icon={<DiamondIcon />} 
+          label="Puzzle &amp; Riddles" 
+          badge={formatCount(categoryCounts.puzzle)} 
+        />
 
         <NavGroupLabel>Community</NavGroupLabel>
         <NavItem href="/UserHoyo/discussion" icon={<UsersIcon />} label="Discussion" />
@@ -349,11 +420,15 @@ export function SidebarAllReport() {
         <NavItem href="/UserHoyo/settings" icon={<InfoIcon />} label="Settings" />
       </nav>
 
-      {/* User Footer */}
+      {/* User Footer - Akan update otomatis saat profile berubah */}
       <div className="px-5 py-5 border-t border-[rgba(200,169,110,0.15)]">
         <Link href="/UserHoyo/profile" className="flex items-center gap-[10px] no-underline group">
-          <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0">
-            {user?.initials || 'TB'}
+          <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0 overflow-hidden">
+            {avatarPhoto ? (
+              <img src={avatarPhoto} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              user?.initials || 'TB'
+            )}
           </div>
           <div className="flex-1">
             <div className="text-[0.85rem] font-semibold text-[#E8E0CC] group-hover:text-[#C8A96E] transition-colors">
@@ -373,7 +448,7 @@ export function SidebarAllReport() {
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space+Mono&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Space_Mono&display=swap');
       `}</style>
     </aside>
   );
