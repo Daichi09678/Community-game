@@ -1,11 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  NavGroupLabel,
-  NavBadge,
-  NavItem,
-} from './NavItem';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   GridIcon,
   HexIcon,
@@ -23,8 +20,9 @@ import { LeaderboardWidget } from './LeaderboardWidget';
 import { StatsWidget } from './StatsWidget';
 import { DiffWidget } from './DiffWidget';
 import { typeMeta } from './TypeBadge';
-import { clipCard, clipHex, clipHexSm, clipBtn, clipWidget } from './clipStyles';
+import { clipCard, clipHex, clipHexSm, clipBtn, clipWidget, clipBadge } from './clipStyles';
 import { LoadingAnimation } from '@/components/ui';
+import { subscribeToReportStats, fetchReportStats } from '@/lib/reportStats';
 
 type GameKey = 'hsr' | 'gi' | 'zzz' | 'hi3';
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -48,7 +46,22 @@ interface Puzzle {
   timeLimit?: number;
 }
 
-const puzzlesData: Puzzle[] = [
+interface UserData {
+  id: string;
+  username: string;
+  email: string;
+  rank: string;
+  level: number;
+  xp: number;
+  initials: string;
+  totalReports: number;
+  role: string;
+  avatarPhoto?: string | null;
+  bannerPhoto?: string | null;
+}
+
+// Fallback puzzles data
+const fallbackPuzzlesData: Puzzle[] = [
   {
     id: 1,
     title: 'The Clockwork Paradox',
@@ -162,23 +175,302 @@ const puzzlesData: Puzzle[] = [
 ];
 
 const gameLabels: Record<GameFilter, string> = {
-  all: 'All Games', hsr: 'Honkai: Star Rail',
-  gi: 'Genshin Impact', zzz: 'Zenless Zone Zero', hi3: 'Honkai Impact 3rd',
+  all: 'All Games', 
+  hsr: 'Honkai: Star Rail',
+  gi: 'Genshin Impact', 
+  zzz: 'Zenless Zone Zero', 
+  hi3: 'Honkai Impact 3rd',
 };
+
+// ─── NAV HELPERS ─────────────────────────────────────────────────────────────
+function NavGroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[0.62rem] font-bold tracking-[0.18em] uppercase text-[#5A5248] px-3 mb-2 mt-6 first:mt-0">
+      {children}
+    </div>
+  );
+}
+
+function NavBadge({ children, variant }: { children: React.ReactNode; variant?: 'new' }) {
+  const clipBadgeStyle = { clipPath: 'polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%)' } as React.CSSProperties;
+  return (
+    <span
+      className={`ml-auto font-['Space_Mono',monospace] text-[0.65rem] px-2 py-[2px]
+        ${variant === 'new'
+          ? 'bg-[rgba(78,205,196,0.15)] text-[#4ECDC4]'
+          : 'bg-[rgba(200,169,110,0.15)] text-[#C8A96E]'}`}
+      style={clipBadgeStyle}
+    >
+      {children}
+    </span>
+  );
+}
+
+interface NavItemProps {
+  href?: string;
+  icon: React.ReactNode;
+  label: string;
+  badge?: string;
+  isNew?: boolean;
+  active?: boolean;
+}
+
+function NavItem({ href, icon, label, badge, isNew, active: propActive }: NavItemProps) {
+  const pathname = usePathname();
+  const isActive = propActive !== undefined ? propActive : (href ? pathname === href : false);
+  const clipHexStyle = { clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' } as React.CSSProperties;
+
+  const cls = `flex items-center gap-[10px] px-3 py-[9px] text-[0.88rem] font-semibold
+    tracking-[0.04em] transition-all duration-200 cursor-pointer mb-[2px] no-underline relative
+    font-['Rajdhani',sans-serif]
+    ${isActive
+      ? 'bg-[rgba(200,169,110,0.1)] text-[#C8A96E]'
+      : 'text-[#9A8F78] hover:bg-[rgba(200,169,110,0.06)] hover:text-[#E8E0CC]'}`;
+
+  const inner = (
+    <>
+      {isActive && (
+        <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#C8A96E]" />
+      )}
+      <span className="w-4 h-4 shrink-0">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {badge && <NavBadge>{badge}</NavBadge>}
+      {isNew && <NavBadge variant="new">New</NavBadge>}
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={cls} style={clipHexStyle}>
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={cls} style={clipHexStyle}>
+      {inner}
+    </div>
+  );
+}
 
 export function PuzzleClient() {
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<UserData | null>(null);
+  const [puzzlesData, setPuzzlesData] = useState<Puzzle[]>([]);
   const [gameFilter, setGameFilter] = useState<GameFilter>('all');
   const [diffFilter, setDiffFilter] = useState<Difficulty | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<PuzzleType | 'all'>('all');
   const [activePuzzle, setActivePuzzle] = useState<Puzzle | null>(null);
   const [statuses, setStatuses] = useState<Record<number, PuzzleStatus>>({});
+  const [userPoints, setUserPoints] = useState(0);
+  const [userRank, setUserRank] = useState(0);
+  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
+  const [totalReports, setTotalReports] = useState(0);
+  const [categoryCounts, setCategoryCounts] = useState({
+    guide: 0,
+    event: 0,
+    puzzle: 0,
+    build: 0,
+  });
+  const [avatarPhoto, setAvatarPhoto] = useState<string | null>(null);
+  const [bannerPhoto, setBannerPhoto] = useState<string | null>(null);
 
+  // Fetch current user data
+  const fetchUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const userData = {
+          id: data.id,
+          username: data.username,
+          email: data.email,
+          rank: data.rank || 'Novice Omni-Voyager',
+          level: data.level || 1,
+          xp: data.xp || 0,
+          initials: data.initials || (data.username?.slice(0, 2).toUpperCase() || 'TB'),
+          totalReports: data.totalReports || 0,
+          role: data.role || 'user',
+          avatarPhoto: data.avatarPhoto || null,
+          bannerPhoto: data.bannerPhoto || null,
+        };
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        if (data.avatarPhoto) {
+          setAvatarPhoto(data.avatarPhoto);
+          localStorage.setItem('userAvatar', data.avatarPhoto);
+        } else {
+          const savedAvatar = localStorage.getItem('userAvatar');
+          if (savedAvatar) setAvatarPhoto(savedAvatar);
+        }
+        
+        if (data.bannerPhoto) {
+          setBannerPhoto(data.bannerPhoto);
+          localStorage.setItem('userBanner', data.bannerPhoto);
+        } else {
+          const savedBanner = localStorage.getItem('userBanner');
+          if (savedBanner) setBannerPhoto(savedBanner);
+        }
+      } else {
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+        const savedAvatar = localStorage.getItem('userAvatar');
+        if (savedAvatar) setAvatarPhoto(savedAvatar);
+        const savedBanner = localStorage.getItem('userBanner');
+        if (savedBanner) setBannerPhoto(savedBanner);
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        setUser(JSON.parse(savedUser));
+      }
+    }
+  };
+
+  // Listen for profile updates
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500);
-    return () => clearTimeout(timer);
+    const handleProfileUpdate = () => {
+      console.log('Profile updated, refreshing sidebar user data...');
+      fetchUser();
+    };
+    
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    window.addEventListener('adminProfileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+      window.removeEventListener('adminProfileUpdated', handleProfileUpdate);
+    };
+  }, []);
+
+  // Subscribe ke global report stats
+  useEffect(() => {
+    const unsubscribe = subscribeToReportStats((stats) => {
+      setTotalReports(stats.totalReports);
+      setCategoryCounts(stats.categoryCounts);
+    });
+    
+    fetchUser();
+    fetchReportStats();
+    
+    const handleRefresh = () => {
+      fetchReportStats();
+      fetchUser();
+    };
+    
+    window.addEventListener('refreshSidebarStats', handleRefresh);
+    window.addEventListener('reportCreated', handleRefresh);
+    window.addEventListener('reportDeleted', handleRefresh);
+    
+    return () => {
+      unsubscribe();
+      window.removeEventListener('refreshSidebarStats', handleRefresh);
+      window.removeEventListener('reportCreated', handleRefresh);
+      window.removeEventListener('reportDeleted', handleRefresh);
+    };
+  }, []);
+
+  // Load user puzzle progress from localStorage
+  useEffect(() => {
+    const savedStatuses = localStorage.getItem('puzzleStatuses');
+    if (savedStatuses) {
+      setStatuses(JSON.parse(savedStatuses));
+    }
+  }, []);
+
+  // Save statuses to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem('puzzleStatuses', JSON.stringify(statuses));
+  }, [statuses]);
+
+  // Fetch puzzles from API
+  useEffect(() => {
+    const fetchPuzzles = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/puzzles', {
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.puzzles) {
+            setPuzzlesData(data.puzzles);
+          } else {
+            setPuzzlesData(fallbackPuzzlesData);
+          }
+        } else {
+          setPuzzlesData(fallbackPuzzlesData);
+        }
+      } catch (error) {
+        console.error('Error fetching puzzles:', error);
+        setPuzzlesData(fallbackPuzzlesData);
+      } finally {
+        setTimeout(() => setLoading(false), 500);
+      }
+    };
+
+    fetchPuzzles();
+  }, []);
+
+  // Fetch user stats
+  useEffect(() => {
+    const fetchUserStats = async () => {
+      try {
+        const solvedIds = Object.entries(statuses)
+          .filter(([, s]) => s === 'solved')
+          .map(([id]) => Number(id));
+        
+        const totalPoints = puzzlesData
+          .filter(p => solvedIds.includes(p.id))
+          .reduce((sum, p) => sum + p.points, 0);
+        
+        setUserPoints(totalPoints);
+        
+        const rank = Math.max(1, Math.floor(100 - totalPoints / 50));
+        setUserRank(Math.min(rank, 100));
+      } catch (error) {
+        console.error('Error calculating stats:', error);
+      }
+    };
+
+    if (puzzlesData.length > 0) {
+      fetchUserStats();
+    }
+  }, [statuses, puzzlesData]);
+
+  // Fetch leaderboard data
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      try {
+        const response = await fetch('/api/puzzles/leaderboard', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.leaderboard) {
+            setLeaderboardData(data.leaderboard);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        setLeaderboardData([
+          { rank: 1, name: 'AeonWalker_X', pts: 4820, solved: 16, badge: '◆' },
+          { rank: 2, name: 'Stelle_Dream', pts: 4200, solved: 14, badge: '◆' },
+          { rank: 3, name: 'HerrsRaiden', pts: 3950, solved: 13, badge: '◆' },
+        ]);
+      }
+    };
+    fetchLeaderboard();
   }, []);
 
   const filtered = puzzlesData.filter(p => {
@@ -190,8 +482,24 @@ export function PuzzleClient() {
 
   const solvedIds = Object.entries(statuses).filter(([, s]) => s === 'solved').map(([id]) => Number(id));
 
-  const handleSolve = (id: number, correct: boolean) => {
-    setStatuses(prev => ({ ...prev, [id]: correct ? 'solved' : 'failed' }));
+  const handleSolve = async (id: number, correct: boolean) => {
+    if (!correct) {
+      setStatuses(prev => ({ ...prev, [id]: 'failed' }));
+      return;
+    }
+    
+    setStatuses(prev => ({ ...prev, [id]: 'solved' }));
+    
+    try {
+      await fetch('/api/puzzles/solve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ puzzleId: id, points: puzzlesData.find(p => p.id === id)?.points }),
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Error recording solve:', error);
+    }
   };
 
   const gamePillStyle = (g: GameFilter) => {
@@ -208,11 +516,19 @@ export function PuzzleClient() {
     };
   };
 
- 
+  const formattedTotal = totalReports >= 1000 
+    ? `${(totalReports / 1000).toFixed(1)}K` 
+    : totalReports.toString();
+
+  const formatCount = (count: number) => count.toString();
+
+  const currentLevelXP = user ? (user.level - 1) * 100 : 0;
+  const nextLevelXP = user ? user.level * 100 : 100;
+  const xpProgress = user ? ((user.xp - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100 : 0;
+
   if (loading) {
     return <LoadingAnimation message="LOADING PUZZLES & RIDDLES..." />;
   }
-
 
   return (
     <div className="flex min-h-screen overflow-x-hidden"
@@ -227,42 +543,126 @@ export function PuzzleClient() {
         }} />
 
       {/* ── SIDEBAR ── */}
-      <aside className="w-[260px] shrink-0 bg-[#0C1220] border-r border-[rgba(200,169,110,0.15)] flex flex-col fixed top-0 bottom-0 left-0 z-50 overflow-y-auto max-md:hidden">
-        <div className="px-6 py-7 border-b border-[rgba(200,169,110,0.15)]">
-          <a href="#" className="flex items-center gap-[10px] font-['Cinzel',serif] text-[0.95rem] font-bold text-[#C8A96E] no-underline">
-            <svg width="28" height="28" viewBox="0 0 28 28">
-              <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#C8A96E" strokeWidth="1.2"/>
-              <circle cx="14" cy="14" r="3.5" fill="rgba(200,169,110,0.3)" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="14" y1="8" x2="14" y2="10.5" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="14" y1="17.5" x2="14" y2="20" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="8" y1="14" x2="10.5" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
-              <line x1="17.5" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
-            </svg>
-            Hoyoverse Hub
-          </a>
-        </div>
-        <nav className="flex-1 px-4 py-5">
-          <NavGroupLabel>Main</NavGroupLabel>
-          <NavItem href="/UserHoyo/dashboard" active={false}><GridIcon />Dashboard</NavItem>
-          <NavItem href="/UserHoyo/all-report" active={false}><HexIcon />All Reports<NavBadge>1.2K</NavBadge></NavItem>
-          <NavGroupLabel>Category</NavGroupLabel>
-          <NavItem href="/UserHoyo/mission&quest" active={false}><HexDotIcon />Mission &amp; Quest<NavBadge>482</NavBadge></NavItem>
-          <NavItem href="/UserHoyo/event" active={false}><CalendarIcon />Event Seasonal<NavBadge variant="new">New</NavBadge></NavItem>
-          <NavItem active={true}><DiamondIcon />Puzzle &amp; Riddles<NavBadge>324</NavBadge></NavItem>
-          <NavGroupLabel>Community</NavGroupLabel>
-          <NavItem href="/UserHoyo/discussion" active={false}><UsersIcon />Discussion</NavItem>
-          <NavItem href="/UserHoyo/leaderboard" active={false}><StarIcon />Leaderboard</NavItem>
-          <NavItem href="/UserHoyo/profile" active={false}><PersonIcon />My Profile</NavItem>
-          <NavItem href="/UserHoyo/settings" active={false}><InfoIcon />Settings</NavItem>
-        </nav>
-        <div className="px-5 py-5 border-t border-[rgba(200,169,110,0.15)]">
-          <div className="flex items-center gap-[10px]">
-            <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0">TB</div>
-            <div>
-              <div className="text-[0.85rem] font-semibold text-[#E8E0CC]">Trailblazer_01</div>
-              <div className="text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">LV.60 · 48 reports</div>
+      <aside className="w-[260px] shrink-0 bg-[#0C1220] border-r border-[rgba(200,169,110,0.15)] flex flex-col fixed top-0 bottom-0 left-0 z-50 overflow-y-auto">
+        {/* Header dengan Banner Background */}
+        <div className="relative">
+          <div 
+            className="h-[100px] w-full relative overflow-hidden"
+            style={{ 
+              background: bannerPhoto 
+                ? `url(${bannerPhoto}) center/cover no-repeat` 
+                : 'linear-gradient(135deg, #0a0f1e 0%, #1a0a2e 40%, #0a1a20 100%)'
+            }}
+          >
+            {!bannerPhoto && Array.from({ length: 15 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute rounded-full bg-white"
+                style={{
+                  width: i % 3 === 0 ? '2px' : '1px',
+                  height: i % 3 === 0 ? '2px' : '1px',
+                  top: `${10 + (i * 17) % 80}%`,
+                  left: `${5 + (i * 23) % 90}%`,
+                  opacity: 0.1 + (i % 5) * 0.08,
+                }}
+              />
+            ))}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0C1220] via-transparent to-transparent" />
+          </div>
+          
+          <div className="absolute bottom-3 left-5 z-10">
+            <Link href="/UserHoyo/dashboard" className="flex items-center gap-[10px] font-['Cinzel',serif] text-[0.95rem] font-bold text-[#C8A96E] no-underline hover:opacity-80 transition-opacity">
+              <svg width="28" height="28" viewBox="0 0 28 28">
+                <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#C8A96E" strokeWidth="1.2"/>
+                <circle cx="14" cy="14" r="3.5" fill="rgba(200,169,110,0.3)" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="14" y1="8" x2="14" y2="10.5" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="14" y1="17.5" x2="14" y2="20" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="8" y1="14" x2="10.5" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
+                <line x1="17.5" y1="14" x2="20" y2="14" stroke="#C8A96E" strokeWidth="0.8"/>
+              </svg>
+              Hoyoverse Hub
+            </Link>
+          </div>
+          
+          <div className="absolute bottom-3 right-5 z-10">
+            <div
+              className="text-[0.55rem] font-['Space_Mono',monospace] tracking-[0.15em] px-2 py-[2px] border"
+              style={{ ...clipBadge, color: '#4ECDC4', borderColor: 'rgba(78,205,196,0.4)', background: 'rgba(78,205,196,0.08)' }}
+            >
+              ● USER
             </div>
           </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-4 py-5">
+          <NavGroupLabel>Main</NavGroupLabel>
+          <NavItem 
+            href="/UserHoyo/dashboard" 
+            icon={<GridIcon />} 
+            label="Dashboard" 
+          />
+          <NavItem 
+            href="/UserHoyo/all-report" 
+            icon={<HexIcon />} 
+            label="All Reports" 
+            badge={formattedTotal || "0"} 
+          />
+
+          <NavGroupLabel>Category</NavGroupLabel>
+          <NavItem 
+            href="/UserHoyo/mission&quest" 
+            icon={<HexDotIcon />} 
+            label="Mission &amp; Quest" 
+            badge={formatCount(categoryCounts.guide)} 
+          />
+          <NavItem 
+            href="/UserHoyo/event" 
+            icon={<CalendarIcon />} 
+            label="Event Seasonal" 
+            badge={formatCount(categoryCounts.event)} 
+            isNew={categoryCounts.event > 0}
+          />
+          <NavItem 
+            href="/UserHoyo/puzzle" 
+            icon={<DiamondIcon />} 
+            label="Puzzle &amp; Riddles" 
+            badge={formatCount(categoryCounts.puzzle)} 
+            active={true}
+          />
+
+          <NavGroupLabel>Community</NavGroupLabel>
+          <NavItem href="/UserHoyo/discussion" icon={<UsersIcon />} label="Discussion" />
+          <NavItem href="/UserHoyo/leaderboard" icon={<StarIcon />} label="Leaderboard" />
+          <NavItem href="/UserHoyo/profile" icon={<PersonIcon />} label="My Profile" />
+          <NavItem href="/UserHoyo/settings" icon={<InfoIcon />} label="Settings" />
+        </nav>
+
+        {/* User Footer */}
+        <div className="px-5 py-5 border-t border-[rgba(200,169,110,0.15)]">
+          <Link href="/UserHoyo/profile" className="flex items-center gap-[10px] no-underline group">
+            <div className="w-9 h-9 rounded-full border border-[#8B6A2E] bg-[rgba(200,169,110,0.1)] flex items-center justify-center font-['Cinzel',serif] text-[0.75rem] text-[#C8A96E] font-bold shrink-0 overflow-hidden">
+              {avatarPhoto ? (
+                <img src={avatarPhoto} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                user?.initials || 'TB'
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="text-[0.85rem] font-semibold text-[#E8E0CC] group-hover:text-[#C8A96E] transition-colors">
+                {user?.username || 'Trailblazer'}
+              </div>
+              <div className="text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">
+                LV.{user?.level || 1} · {user?.totalReports || 0} reports
+              </div>
+              <div className="mt-1 h-[2px] bg-[rgba(200,169,110,0.1)] rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#C8A96E] to-[#EDD28A] transition-all duration-300"
+                  style={{ width: `${Math.min(Math.max(xpProgress, 0), 100)}%` }}
+                />
+              </div>
+            </div>
+          </Link>
         </div>
       </aside>
 
@@ -318,7 +718,7 @@ export function PuzzleClient() {
                 <div className="flex items-center gap-4 mt-3">
                   {[
                     { label: 'Puzzles', value: puzzlesData.length, color: '#4ECDC4' },
-                    { label: 'Your Points', value: solvedIds.reduce((s, id) => s + (puzzlesData.find(p => p.id === id)?.points ?? 0), 0), color: '#C8A96E' },
+                    { label: 'Your Points', value: userPoints, color: '#C8A96E' },
                     { label: 'Completed', value: solvedIds.length, color: '#6DD18A' },
                   ].map((s, i) => (
                     <div key={i} className="flex items-baseline gap-1">
@@ -404,8 +804,15 @@ export function PuzzleClient() {
 
             {/* Right sidebar */}
             <div>
-              <StatsWidget solvedIds={solvedIds} puzzlesData={puzzlesData} />
-              <LeaderboardWidget />
+              <StatsWidget 
+                solvedIds={solvedIds} 
+                puzzlesData={puzzlesData} 
+                userPoints={userPoints}
+                userRank={userRank}
+              />
+              
+              <LeaderboardWidget leaderboardData={leaderboardData} userPoints={userPoints} />
+              
               <DiffWidget puzzlesData={puzzlesData} />
 
               {/* Type legend */}

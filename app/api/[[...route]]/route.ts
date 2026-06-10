@@ -2,12 +2,14 @@ import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { db } from '@/lib/db/drizzle';
 import { users, userProfiles, otpCodes, reports, adminActivities } from '../../../lib/db/drizzle/schema';
+import { puzzles, userPuzzles } from '../../../lib/db/drizzle/schema/puzzles'; 
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { scrypt, randomBytes } from 'crypto';
 import { promisify } from 'util';
+
 
 const scryptAsync = promisify(scrypt);
 
@@ -503,163 +505,261 @@ const app = new Elysia({ prefix: '/api' })
     })
   })
   
-  // =============================================
-  // SIGN IN
-  // =============================================
-  
-  .post('/auth/signin', async ({ body, set }) => {
-    try {
-      const { email, password } = body as { email: string; password: string };
+// =============================================
+// SIGN IN (DENGAN PENGECEKAN BAN)
+// =============================================
 
-      console.log('📝 Sign in attempt:', email);
+.post('/auth/signin', async ({ body, set }) => {
+  try {
+    const { email, password } = body as { email: string; password: string };
 
-      const user = await db.select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        password: users.password,
-        isVerified: users.isVerified,
-        role: users.role,
-        rank: users.rank,
-        level: users.level,
-        xp: users.xp,
-      }).from(users).where(eq(users.email, email));
+    console.log('📝 Sign in attempt:', email);
+
+    // ✅ TAMBAHKAN PENGECEKAN BAN DI SINI (sebelum cek password)
+    const userCheck = await db.select({
+      id: users.id,
+      isBanned: users.isBanned,
+      banReason: users.banReason,
+      banExpiry: users.banExpiry,
+    }).from(users).where(eq(users.email, email));
+    
+    if (userCheck.length > 0) {
+      const userData = userCheck[0];
       
-      if (user.length === 0) {
-        set.status = 401;
-        return { error: 'Email atau password salah' };
-      }
-
-      const validPassword = await verifyPassword(password, user[0].password);
-      if (!validPassword) {
-        set.status = 401;
-        return { error: 'Email atau password salah' };
-      }
-
-      console.log('✅ Password valid, sending OTP to:', email);
-
-      const code = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-      const id = randomUUID();
-
-      await db.delete(otpCodes).where(eq(otpCodes.email, email));
-      await db.insert(otpCodes).values({ id, email, code, expiresAt, isUsed: false });
-      
-      await sendOTPEmail(email, code, user[0].username, 'login');
-      
-      console.log('✅ OTP sent to:', email);
-
-      const redirectUrl = user[0].role === 'admin' 
-        ? '/HoyoAdmin/dashboard-admin' 
-        : '/UserHoyo/dashboard';
-
-      return {
-        success: true,
-        message: 'OTP sent to your email',
-        requiresOTP: true,
-        email: email,
-        role: user[0].role,
-        redirectUrl: redirectUrl,
-        devOTP: process.env.NODE_ENV === 'development' ? code : undefined
-      };
-    } catch (error) {
-      console.error('❌ Signin error:', error);
-      set.status = 500;
-      return { error: 'Internal server error' };
-    }
-  }, {
-    body: t.Object({
-      email: t.String({ format: 'email' }),
-      password: t.String()
-    })
-  })
-
-  // =============================================
-  // VERIFY LOGIN OTP
-  // =============================================
-  
-  .post('/auth/verify-login-otp', async ({ body, set, cookie: { token } }) => {
-    try {
-      const { email, code } = body as { email: string; code: string };
-      
-      console.log('🔐 Verifying login OTP for:', email);
-
-      const valid = await db.select()
-        .from(otpCodes)
-        .where(
-          and(
-            eq(otpCodes.email, email),
-            eq(otpCodes.code, code),
-            eq(otpCodes.isUsed, false)
-          )
-        );
-
-      if (valid.length === 0) {
-        set.status = 400;
-        return { error: 'Kode OTP tidak valid' };
-      }
-
-      const otp = valid[0];
-      if (new Date() > new Date(otp.expiresAt)) {
-        set.status = 400;
-        return { error: 'Kode OTP sudah kadaluarsa' };
-      }
-
-      await db.update(otpCodes).set({ isUsed: true }).where(eq(otpCodes.id, otp.id));
-      
-      const user = await db.select().from(users).where(eq(users.email, email));
-      if (user.length === 0) {
-        set.status = 404;
-        return { error: 'User tidak ditemukan' };
-      }
-
-      await db.update(users)
-        .set({ lastLogin: new Date() })
-        .where(eq(users.id, user[0].id));
-
-      const jwtToken = await generateToken(user[0].id, user[0].email);
-      token.set({
-        value: jwtToken,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      });
-
-      console.log('✅ Login OTP verified successfully for:', email);
-      console.log('👤 User role:', user[0].role);
-
-      const redirectUrl = user[0].role === 'admin' 
-        ? '/HoyoAdmin/dashboard-admin' 
-        : '/UserHoyo/dashboard';
-
-      return {
-        success: true,
-        verified: true,
-        message: 'Verifikasi berhasil',
-        role: user[0].role,
-        redirectUrl: redirectUrl,
-        user: {
-          id: user[0].id,
-          username: user[0].username,
-          email: user[0].email,
-          rank: user[0].rank,
-          level: user[0].level,
-          role: user[0].role,
+      // Cek apakah user di-ban
+      if (userData.isBanned === true) {
+        let banMessage = 'Your account has been permanently banned.';
+        
+        // Cek jika ban sementara (ada expiry date)
+        if (userData.banExpiry) {
+          const expiry = new Date(userData.banExpiry);
+          const now = new Date();
+          
+          if (now > expiry) {
+            // Ban sudah expired, auto unban
+            await db.update(users)
+              .set({ 
+                isBanned: false,
+                banReason: null,
+                banExpiry: null,
+              })
+              .where(eq(users.id, userData.id));
+          } else {
+            // Ban masih aktif
+            const expiryDate = expiry.toLocaleDateString('id-ID', { 
+              day: 'numeric', 
+              month: 'long', 
+              year: 'numeric' 
+            });
+            banMessage = `Akun Anda telah di-ban sementara hingga ${expiryDate}. Alasan: ${userData.banReason || 'Melanggar aturan'}`;
+            set.status = 403;
+            return { error: banMessage };
+          }
+        } else {
+          // Permanent ban
+          banMessage = `Akun Anda telah di-ban permanen. Alasan: ${userData.banReason || 'Melanggar aturan'}. Hubungi administrator untuk informasi lebih lanjut.`;
+          set.status = 403;
+          return { error: banMessage };
         }
-      };
-    } catch (error) {
-      console.error('❌ Verify login OTP error:', error);
-      set.status = 500;
-      return { error: 'Verification failed' };
+      }
     }
-  }, {
-    body: t.Object({
-      email: t.String({ format: 'email' }),
-      code: t.String({ minLength: 6, maxLength: 6 })
-    })
+
+    // Lanjutkan dengan pengecekan password seperti biasa
+    const user = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      password: users.password,
+      isVerified: users.isVerified,
+      role: users.role,
+      rank: users.rank,
+      level: users.level,
+      xp: users.xp,
+    }).from(users).where(eq(users.email, email));
+    
+    if (user.length === 0) {
+      set.status = 401;
+      return { error: 'Email atau password salah' };
+    }
+
+    const validPassword = await verifyPassword(password, user[0].password);
+    if (!validPassword) {
+      set.status = 401;
+      return { error: 'Email atau password salah' };
+    }
+
+    // Cek ban lagi setelah password valid (untuk jaga-jaga)
+    if (userCheck.length > 0 && userCheck[0].isBanned === true) {
+      const userData = userCheck[0];
+      if (userData.banExpiry) {
+        const expiry = new Date(userData.banExpiry);
+        if (new Date() > expiry) {
+          // Auto unban jika expired
+          await db.update(users)
+            .set({ 
+              isBanned: false,
+              banReason: null,
+              banExpiry: null,
+            })
+            .where(eq(users.id, userData.id));
+        } else {
+          set.status = 403;
+          return { error: `Akun Anda sedang di-ban hingga ${new Date(userData.banExpiry).toLocaleDateString()}` };
+        }
+      } else {
+        set.status = 403;
+        return { error: 'Akun Anda telah di-ban permanen. Hubungi administrator.' };
+      }
+    }
+
+    console.log('✅ Password valid, sending OTP to:', email);
+
+    const code = generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const id = randomUUID();
+
+    await db.delete(otpCodes).where(eq(otpCodes.email, email));
+    await db.insert(otpCodes).values({ id, email, code, expiresAt, isUsed: false });
+    
+    await sendOTPEmail(email, code, user[0].username, 'login');
+    
+    console.log('✅ OTP sent to:', email);
+
+    const redirectUrl = user[0].role === 'admin' 
+      ? '/HoyoAdmin/dashboard-admin' 
+      : '/UserHoyo/dashboard';
+
+    return {
+      success: true,
+      message: 'OTP sent to your email',
+      requiresOTP: true,
+      email: email,
+      role: user[0].role,
+      redirectUrl: redirectUrl,
+      devOTP: process.env.NODE_ENV === 'development' ? code : undefined
+    };
+  } catch (error) {
+    console.error('❌ Signin error:', error);
+    set.status = 500;
+    return { error: 'Internal server error' };
+  }
+}, {
+  body: t.Object({
+    email: t.String({ format: 'email' }),
+    password: t.String()
   })
+})
+
+// =============================================
+// VERIFY LOGIN OTP (DENGAN PENGECEKAN BAN)
+// =============================================
+
+.post('/auth/verify-login-otp', async ({ body, set, cookie: { token } }) => {
+  try {
+    const { email, code } = body as { email: string; code: string };
+    
+    console.log('🔐 Verifying login OTP for:', email);
+
+    const valid = await db.select()
+      .from(otpCodes)
+      .where(
+        and(
+          eq(otpCodes.email, email),
+          eq(otpCodes.code, code),
+          eq(otpCodes.isUsed, false)
+        )
+      );
+
+    if (valid.length === 0) {
+      set.status = 400;
+      return { error: 'Kode OTP tidak valid' };
+    }
+
+    const otp = valid[0];
+    if (new Date() > new Date(otp.expiresAt)) {
+      set.status = 400;
+      return { error: 'Kode OTP sudah kadaluarsa' };
+    }
+
+    await db.update(otpCodes).set({ isUsed: true }).where(eq(otpCodes.id, otp.id));
+    
+    const user = await db.select().from(users).where(eq(users.email, email));
+    if (user.length === 0) {
+      set.status = 404;
+      return { error: 'User tidak ditemukan' };
+    }
+
+    // ✅ TAMBAHKAN PENGECEKAN BAN DI SINI
+    if (user[0].isBanned === true) {
+      let banMessage = 'Akun Anda telah di-ban permanen.';
+      if (user[0].banExpiry) {
+        const expiry = new Date(user[0].banExpiry);
+        if (new Date() > expiry) {
+          // Auto unban jika expired
+          await db.update(users)
+            .set({ 
+              isBanned: false,
+              banReason: null,
+              banExpiry: null,
+            })
+            .where(eq(users.id, user[0].id));
+        } else {
+          set.status = 403;
+          return { error: `Akun Anda sedang di-ban hingga ${new Date(user[0].banExpiry).toLocaleDateString()}. Alasan: ${user[0].banReason || 'Melanggar aturan'}` };
+        }
+      } else {
+        set.status = 403;
+        return { error: `Akun Anda telah di-ban permanen. Alasan: ${user[0].banReason || 'Melanggar aturan'}. Hubungi administrator.` };
+      }
+    }
+
+    await db.update(users)
+      .set({ lastLogin: new Date() })
+      .where(eq(users.id, user[0].id));
+
+    const jwtToken = await generateToken(user[0].id, user[0].email);
+    token.set({
+      value: jwtToken,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+    });
+
+    console.log('✅ Login OTP verified successfully for:', email);
+    console.log('👤 User role:', user[0].role);
+
+    const redirectUrl = user[0].role === 'admin' 
+      ? '/HoyoAdmin/dashboard-admin' 
+      : '/UserHoyo/dashboard';
+
+    return {
+      success: true,
+      verified: true,
+      message: 'Verifikasi berhasil',
+      role: user[0].role,
+      redirectUrl: redirectUrl,
+      user: {
+        id: user[0].id,
+        username: user[0].username,
+        email: user[0].email,
+        rank: user[0].rank,
+        level: user[0].level,
+        role: user[0].role,
+      }
+    };
+  } catch (error) {
+    console.error('❌ Verify login OTP error:', error);
+    set.status = 500;
+    return { error: 'Verification failed' };
+  }
+}, {
+  body: t.Object({
+    email: t.String({ format: 'email' }),
+    code: t.String({ minLength: 6, maxLength: 6 })
+  })
+})
 
   .post('/auth/resend-login-otp', async ({ body, set }) => {
     try {
@@ -3248,6 +3348,564 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Failed to fetch data' };
     }
   })
+
+ // =============================================
+// ADMIN WARNING & BAN ENDPOINTS
+// =============================================
+
+// POST /admin/warn-user - Send warning to user
+.post('/admin/warn-user', async ({ body, cookie: { token }, set }) => {
+  try {
+    const { userId, username, message } = body as { userId: string; username: string; message: string };
+    
+    console.log(`⚠️ Sending warning to user: ${username} (${userId})`);
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const currentUser = await db.select({ role: users.role, username: users.username })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+      
+    if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+      set.status = 403;
+      return { error: 'Forbidden - Admin access required' };
+    }
+
+    // Check if user exists
+    const targetUser = await db.select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.id, userId));
+    
+    if (targetUser.length === 0) {
+      set.status = 404;
+      return { error: 'User not found' };
+    }
+
+    // Catat aktivitas admin
+    await db.insert(adminActivities).values({
+      adminId: payload.userId,
+      actionType: 'WARN_USER',
+      title: `Sent warning to ${username}`,
+      description: message,
+      targetType: 'user',
+      targetId: userId,
+      createdAt: new Date(),
+    });
+    
+    console.log(`✅ Warning sent to ${username} by ${currentUser[0].username}`);
+    
+    return {
+      success: true,
+      message: `Warning sent to ${username}`,
+    };
+  } catch (error) {
+    console.error('❌ Error sending warning:', error);
+    set.status = 500;
+    return { error: 'Failed to send warning' };
+  }
+}, {
+  body: t.Object({
+    userId: t.String(),
+    username: t.String(),
+    message: t.String(),
+  })
+})
+
+// POST /admin/ban-user - Ban a user (DIPERBAIKI - tanpa raw SQL)
+.post('/admin/ban-user', async ({ body, cookie: { token }, set }) => {
+  try {
+    const { userId, username, reason, duration } = body as { 
+      userId: string; 
+      username: string; 
+      reason: string; 
+      duration: '1day' | '7days' | '30days' | 'permanent';
+    };
+    
+    console.log(`🔨 Banning user: ${username} (${userId}) - Duration: ${duration}`);
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const currentUser = await db.select({ role: users.role, username: users.username })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+      
+    if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+      set.status = 403;
+      return { error: 'Forbidden - Admin access required' };
+    }
+
+    // Check if user exists
+    const targetUser = await db.select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.id, userId));
+    
+    if (targetUser.length === 0) {
+      set.status = 404;
+      return { error: 'User not found' };
+    }
+
+    // Calculate ban expiry date
+    let banExpiry: Date | null = null;
+    const now = new Date();
+    if (duration === '1day') {
+      banExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    } else if (duration === '7days') {
+      banExpiry = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else if (duration === '30days') {
+      banExpiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Update user with ban information menggunakan Drizzle biasa
+    await db.update(users)
+      .set({ 
+        isBanned: true,
+        banReason: reason,
+        banExpiry: banExpiry,
+      })
+      .where(eq(users.id, userId));
+
+    // Catat aktivitas admin
+    await db.insert(adminActivities).values({
+      adminId: payload.userId,
+      actionType: 'BAN_USER',
+      title: `Banned user: ${username}`,
+      description: `${reason} (Duration: ${duration})`,
+      targetType: 'user',
+      targetId: userId,
+      createdAt: new Date(),
+    });
+    
+    console.log(`✅ User ${username} banned by ${currentUser[0].username}`);
+    
+    return {
+      success: true,
+      message: `${username} has been banned${duration !== 'permanent' ? ` for ${duration}` : ' permanently'}`,
+      isBanned: true,
+    };
+  } catch (error) {
+    console.error('❌ Error banning user:', error);
+    set.status = 500;
+    return { error: 'Failed to ban user: ' + (error instanceof Error ? error.message : 'Unknown error') };
+  }
+}, {
+  body: t.Object({
+    userId: t.String(),
+    username: t.String(),
+    reason: t.String(),
+    duration: t.Union([
+      t.Literal('1day'),
+      t.Literal('7days'),
+      t.Literal('30days'),
+      t.Literal('permanent'),
+    ]),
+  })
+})
+
+// POST /admin/unban-user - Unban a user
+.post('/admin/unban-user', async ({ body, cookie: { token }, set }) => {
+  try {
+    const { userId, username } = body as { userId: string; username: string };
+    
+    console.log(`🔓 Unbanning user: ${username} (${userId})`);
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const currentUser = await db.select({ role: users.role, username: users.username })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+      
+    if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+      set.status = 403;
+      return { error: 'Forbidden - Admin access required' };
+    }
+
+    // Update user - remove ban menggunakan Drizzle biasa
+    await db.update(users)
+      .set({ 
+        isBanned: false,
+        banReason: null,
+        banExpiry: null,
+      })
+      .where(eq(users.id, userId));
+
+    // Catat aktivitas admin
+    await db.insert(adminActivities).values({
+      adminId: payload.userId,
+      actionType: 'UNBAN_USER',
+      title: `Unbanned user: ${username}`,
+      targetType: 'user',
+      targetId: userId,
+      createdAt: new Date(),
+    });
+    
+    console.log(`✅ User ${username} unbanned by ${currentUser[0].username}`);
+    
+    return {
+      success: true,
+      message: `${username} has been unbanned`,
+      isBanned: false,
+    };
+  } catch (error) {
+    console.error('❌ Error unbanning user:', error);
+    set.status = 500;
+    return { error: 'Failed to unban user: ' + (error instanceof Error ? error.message : 'Unknown error') };
+  }
+}, {
+  body: t.Object({
+    userId: t.String(),
+    username: t.String(),
+  })
+})
+
+// GET /admin/check-ban-status/:userId - Check if user is banned
+.get('/admin/check-ban-status/:userId', async ({ params: { userId }, cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const currentUser = await db.select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+      
+    if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+      set.status = 403;
+      return { error: 'Forbidden - Admin access required' };
+    }
+
+    // Ambil data user menggunakan Drizzle biasa
+    const targetUser = await db.select({
+      isBanned: users.isBanned,
+      banReason: users.banReason,
+      banExpiry: users.banExpiry,
+    })
+    .from(users)
+    .where(eq(users.id, userId));
+
+    if (targetUser.length === 0) {
+      set.status = 404;
+      return { error: 'User not found' };
+    }
+
+    const userData = targetUser[0];
+    let isBanned = userData.isBanned || false;
+    let banExpiry = userData.banExpiry;
+    
+    // Check if temporary ban has expired
+    if (isBanned && banExpiry) {
+      const now = new Date();
+      const expiry = new Date(banExpiry);
+      if (now > expiry) {
+        // Auto-unban expired ban
+        await db.update(users)
+          .set({ 
+            isBanned: false,
+            banReason: null,
+            banExpiry: null,
+          })
+          .where(eq(users.id, userId));
+        isBanned = false;
+        banExpiry = null;
+      }
+    }
+
+    return {
+      success: true,
+      isBanned: isBanned,
+      banReason: userData.banReason || null,
+      banExpiry: banExpiry ? new Date(banExpiry).toISOString() : null,
+    };
+  } catch (error) {
+    console.error('Error checking ban status:', error);
+    set.status = 500;
+    return { error: 'Failed to check ban status' };
+  }
+})
+
+// =============================================
+// PUZZLE ENDPOINTS (TERHUBUNG DATABASE)
+// =============================================
+
+// GET /api/puzzles - Get all puzzles (unsolved only for current user)
+.get('/puzzles', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    // Get all puzzles
+    const allPuzzles = await db.select().from(puzzles).orderBy(asc(puzzles.orderIndex));
+    
+    // Get solved puzzle IDs for this user
+    const solvedPuzzles = await db.select({ puzzleId: userPuzzles.puzzleId })
+      .from(userPuzzles)
+      .where(and(
+        eq(userPuzzles.userId, payload.userId),
+        eq(userPuzzles.status, 'solved')
+      ));
+    
+    const solvedIds = new Set(solvedPuzzles.map(sp => sp.puzzleId));
+    
+    // Filter out solved puzzles
+    const availablePuzzles = allPuzzles.filter(p => !solvedIds.has(p.id));
+    
+    // Parse options for each puzzle
+    const puzzlesWithOptions = availablePuzzles.map(p => ({
+      ...p,
+      options: p.options ? JSON.parse(p.options) : undefined,
+    }));
+    
+    return { success: true, puzzles: puzzlesWithOptions };
+  } catch (error) {
+    console.error('Error fetching puzzles:', error);
+    set.status = 500;
+    return { error: 'Failed to fetch puzzles' };
+  }
+})
+
+// GET /api/puzzles/all - Get all puzzles (including solved) - for admin
+.get('/puzzles/all', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const currentUser = await db.select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, payload.userId));
+      
+    if (currentUser.length === 0 || currentUser[0].role !== 'admin') {
+      set.status = 403;
+      return { error: 'Forbidden - Admin access required' };
+    }
+
+    const allPuzzles = await db.select().from(puzzles).orderBy(asc(puzzles.orderIndex));
+    
+    const puzzlesWithOptions = allPuzzles.map(p => ({
+      ...p,
+      options: p.options ? JSON.parse(p.options) : undefined,
+    }));
+    
+    return { success: true, puzzles: puzzlesWithOptions };
+  } catch (error) {
+    console.error('Error fetching all puzzles:', error);
+    set.status = 500;
+    return { error: 'Failed to fetch puzzles' };
+  }
+})
+
+// POST /api/puzzles/solve - Record puzzle solve
+.post('/puzzles/solve', async ({ body, cookie: { token }, set }) => {
+  try {
+    const { puzzleId, points } = body as { puzzleId: number; points: number };
+    
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    // Check if already solved
+    const existing = await db.select()
+      .from(userPuzzles)
+      .where(and(
+        eq(userPuzzles.userId, payload.userId),
+        eq(userPuzzles.puzzleId, puzzleId)
+      ));
+    
+    if (existing.length > 0) {
+      return { success: true, message: 'Already solved' };
+    }
+
+    // Record solve
+    await db.insert(userPuzzles).values({
+      userId: payload.userId,
+      puzzleId: puzzleId,
+      status: 'solved',
+      solvedAt: new Date(),
+    });
+    
+    // Update puzzle solvedBy count
+    await db.execute(sql`
+      UPDATE puzzles 
+      SET solved_by = solved_by + 1 
+      WHERE id = ${puzzleId}
+    `);
+    
+    // Update user XP
+    await db.update(users)
+      .set({ xp: sql`${users.xp} + ${points}` })
+      .where(eq(users.id, payload.userId));
+    
+    console.log(`✅ User ${payload.userId} solved puzzle ${puzzleId} for ${points} points`);
+    
+    return { success: true, message: 'Puzzle solve recorded' };
+  } catch (error) {
+    console.error('Error recording puzzle solve:', error);
+    set.status = 500;
+    return { error: 'Failed to record puzzle solve' };
+  }
+}, {
+  body: t.Object({
+    puzzleId: t.Number(),
+    points: t.Number(),
+  })
+})
+
+// GET /api/puzzles/leaderboard - Get puzzle leaderboard
+.get('/puzzles/leaderboard', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    // Get leaderboard from userPuzzles aggregated
+    const leaderboardResult = await db.execute(sql`
+      SELECT 
+        u.username,
+        COUNT(up.puzzle_id) as solved_count,
+        SUM(p.points) as total_points
+      FROM user_puzzles up
+      JOIN users u ON u.id = up.user_id
+      JOIN puzzles p ON p.id = up.puzzle_id
+      WHERE up.status = 'solved'
+      GROUP BY u.id, u.username
+      ORDER BY total_points DESC
+      LIMIT 10
+    `);
+    
+    const rows = leaderboardResult as any;
+    const formattedLeaderboard = rows.map((row: any, index: number) => ({
+      rank: index + 1,
+      name: row.username,
+      pts: row.total_points,
+      solved: row.solved_count,
+      badge: index < 3 ? '◆' : '',
+    }));
+    
+    return { success: true, leaderboard: formattedLeaderboard };
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    // Return empty array if error
+    return { success: true, leaderboard: [] };
+  }
+})
+
+// GET /api/puzzles/stats - Get user puzzle stats
+.get('/puzzles/stats', async ({ cookie: { token }, set }) => {
+  try {
+    const tokenValue = token.value;
+    if (!tokenValue || typeof tokenValue !== 'string') {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+
+    const payload = await verifyToken(tokenValue);
+    if (!payload) {
+      set.status = 401;
+      return { error: 'Invalid token' };
+    }
+
+    const solvedCount = await db.select({ count: sql<number>`count(*)` })
+      .from(userPuzzles)
+      .where(and(
+        eq(userPuzzles.userId, payload.userId),
+        eq(userPuzzles.status, 'solved')
+      ));
+    
+    const totalPointsResult = await db.execute(sql`
+      SELECT SUM(p.points) as total
+      FROM user_puzzles up
+      JOIN puzzles p ON p.id = up.puzzle_id
+      WHERE up.user_id = ${payload.userId} AND up.status = 'solved'
+    `);
+    
+    const totalPuzzles = await db.select({ count: sql<number>`count(*)` })
+      .from(puzzles);
+    
+    const pointsRows = totalPointsResult as any;
+    
+    return {
+      success: true,
+      stats: {
+        solved: solvedCount[0]?.count || 0,
+        total: totalPuzzles[0]?.count || 0,
+        points: pointsRows[0]?.total || 0,
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching puzzle stats:', error);
+    return { success: true, stats: { solved: 0, total: 0, points: 0 } };
+  }
+})
 
 // =============================================
 // EXPORT UNTUK NEXT.JS

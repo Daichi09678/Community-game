@@ -683,21 +683,7 @@ export default function SignUp() {
                       <span style={{fontSize:'.62rem',fontWeight:700,letterSpacing:'.14em',textTransform:'uppercase',color:'#3A3530'}}>or register with</span>
                     </div>
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'.65rem'}}>
-                      <button type="button" className="social-btn">
-                        <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
-                          <path d="M18.17 10.2c0-.65-.06-1.27-.16-1.87H10v3.54h4.59a3.93 3.93 0 01-1.7 2.58v2.14h2.75c1.61-1.48 2.53-3.66 2.53-6.4z" fill="#4285F4"/>
-                          <path d="M10 18.5c2.3 0 4.22-.76 5.63-2.06l-2.75-2.14c-.76.51-1.73.81-2.88.81-2.21 0-4.09-1.5-4.76-3.5H2.4v2.21A8.5 8.5 0 0010 18.5z" fill="#34A853"/>
-                          <path d="M5.24 11.61A5.1 5.1 0 015.24 8.4V6.19H2.4A8.5 8.5 0 002.4 13.8l2.84-2.19z" fill="#FBBC05"/>
-                          <path d="M10 4.5c1.24 0 2.36.43 3.24 1.27l2.43-2.43A8.5 8.5 0 002.4 6.19l2.84 2.21C5.91 6 7.79 4.5 10 4.5z" fill="#EA4335"/>
-                        </svg>
-                        Google
-                      </button>
-                      <button type="button" className="social-btn">
-                        <svg width="15" height="15" viewBox="0 0 20 20" fill="#5865F2">
-                          <path d="M16.93 4.26A16.34 16.34 0 0012.8 3c-.18.32-.4.76-.54 1.1a15.08 15.08 0 00-4.52 0A11.67 11.67 0 007.2 3 16.3 16.3 0 003.07 4.26C.44 8.33-.27 12.3.08 16.22a16.5 16.5 0 005.04 2.55c.41-.55.77-1.14 1.08-1.76a10.7 10.7 0 01-1.7-.82l.41-.32a11.76 11.76 0 0010.18 0c.13.11.27.22.41.32-.54.32-1.11.6-1.7.82.31.62.67 1.21 1.08 1.76a16.43 16.43 0 005.04-2.55c.41-4.53-.7-8.46-2.99-11.96zM6.68 13.77c-.97 0-1.77-.9-1.77-2s.78-2 1.77-2 1.79.9 1.77 2c.02 1.1-.78 2-1.77 2zm6.64 0c-.97 0-1.77-.9-1.77-2s.78-2 1.77-2 1.79.9 1.77 2c0 1.1-.78 2-1.77 2z"/>
-                        </svg>
-                        Discord
-                      </button>
+                      {/* Opsi Google dan Discord dihapus */}
                     </div>
                   </form>
                 )}

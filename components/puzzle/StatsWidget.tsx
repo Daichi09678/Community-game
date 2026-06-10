@@ -5,10 +5,11 @@ interface Puzzle {
   points: number;
 }
 
-export function StatsWidget({ solvedIds, puzzlesData }: { solvedIds: number[]; puzzlesData: Puzzle[] }) {
+export function StatsWidget({ solvedIds, puzzlesData, userPoints, userRank }: 
+  { solvedIds: number[]; puzzlesData: Puzzle[]; userPoints: number; userRank: number }) {
   const total = puzzlesData.length;
   const solved = solvedIds.length;
-  const totalPts = puzzlesData.filter(p => solvedIds.includes(p.id)).reduce((s, p) => s + p.points, 0);
+  const totalPts = userPoints;
 
   return (
     <div className="bg-[#0C1220] border border-[rgba(200,169,110,0.15)] p-5 mb-5" style={clipWidget}>
@@ -30,7 +31,7 @@ export function StatsWidget({ solvedIds, puzzlesData }: { solvedIds: number[]; p
           { label: 'Total Points', value: totalPts.toLocaleString(), color: '#C8A96E' },
           { label: 'Solved',       value: solved,                     color: '#6DD18A' },
           { label: 'Remaining',    value: total - solved,             color: '#4ECDC4' },
-          { label: 'Rank',         value: '#5',                       color: '#A855F7' },
+          { label: 'Rank',         value: `#${userRank}`,             color: '#A855F7' },
         ].map((s, i) => (
           <div key={i} className="p-3"
             style={{ ...clipBadge, background: `${s.color}0D`, border: `1px solid ${s.color}22` }}>

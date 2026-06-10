@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { GameBadge } from './GameBadge';
 import { clipWidget, clipBadge } from './clipStyles';
 import { BubbleIcon, EyeIcon } from './Icons';
@@ -25,6 +26,14 @@ interface Discussion {
   tags: string[];
 }
 
+// Map game ke groupId
+const gameToGroupId: Record<string, number> = {
+  hsr: 1,
+  gi: 2,
+  zzz: 3,
+  hi3: 4,
+};
+
 const categoryMap: Record<string, { label: string; color: string }> = {
   meta:      { label: 'Meta',      color: 'text-[#4ECDC4] border-[rgba(78,205,196,0.3)] bg-[rgba(78,205,196,0.08)]' },
   lore:      { label: 'Lore',      color: 'text-[#C8A96E] border-[rgba(200,169,110,0.3)] bg-[rgba(200,169,110,0.08)]' },
@@ -38,6 +47,7 @@ export function DiscussionCard({ disc, accentColor }: { disc: Discussion; accent
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(disc.likes);
   const cat = categoryMap[disc.category];
+  const groupId = gameToGroupId[disc.game] || 1;
 
   const handleLike = () => {
     setLiked(p => !p);
@@ -102,7 +112,12 @@ export function DiscussionCard({ disc, accentColor }: { disc: Discussion; accent
                 </div>
                 <span className="text-[0.75rem] text-[#9A8F78]">{disc.author}</span>
               </div>
-              <GameBadge game={disc.game} />
+              {/* GameBadge sebagai LINK ke groups */}
+              <Link href={`/UserHoyo/groups?groupId=${groupId}`}>
+                <div className="cursor-pointer hover:opacity-80 transition-opacity">
+                  <GameBadge game={disc.game} />
+                </div>
+              </Link>
               <span className="text-[0.7rem] text-[#5A5248] font-['Space_Mono',monospace]">{disc.date}</span>
             </div>
 

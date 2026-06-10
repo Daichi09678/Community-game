@@ -7,3 +7,4 @@ export * from './adminActivities';
 export * from './missions';
 export * from './quests';
 export * from './missionQuest';
+export * from './puzzles';
