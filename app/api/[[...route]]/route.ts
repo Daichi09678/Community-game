@@ -1,3 +1,4 @@
+// app/api/[...route]/route.ts
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { db } from '@/lib/db/drizzle';
@@ -136,7 +137,22 @@ function formatDateTime(date: Date | null | undefined | string): string {
 
 // ========== ELYSIA APP ==========
 const app = new Elysia({ prefix: '/api' })
-  .use(cors({ origin: true, credentials: true }))
+  // ✅ CORS LENGKAP
+  .use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Accept'],
+    maxAge: 86400,
+  }))
+  
+  // ✅ Middleware CORS manual
+  .onAfterHandle(({ set }) => {
+    set.headers['Access-Control-Allow-Origin'] = '*';
+    set.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
+    set.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Cookie, Accept';
+    set.headers['Access-Control-Allow-Credentials'] = 'true';
+  })
   
   // =============================================
   // HEALTH CHECK
@@ -395,7 +411,7 @@ const app = new Elysia({ prefix: '/api' })
   })
   
   // =============================================
-  // AUTH ENDPOINTS
+  // AUTH ENDPOINTS (kecuali signin-mobile)
   // =============================================
   
   .post('/auth/signup', async ({ body, set, cookie: { token } }) => {
@@ -506,7 +522,7 @@ const app = new Elysia({ prefix: '/api' })
   })
   
 // =============================================
-// SIGN IN (DENGAN PENGECEKAN BAN)
+// SIGN IN (DENGAN PENGECEKAN BAN) - WEB
 // =============================================
 
 .post('/auth/signin', async ({ body, set }) => {
@@ -515,7 +531,6 @@ const app = new Elysia({ prefix: '/api' })
 
     console.log('📝 Sign in attempt:', email);
 
-    // ✅ TAMBAHKAN PENGECEKAN BAN DI SINI (sebelum cek password)
     const userCheck = await db.select({
       id: users.id,
       isBanned: users.isBanned,
@@ -526,17 +541,14 @@ const app = new Elysia({ prefix: '/api' })
     if (userCheck.length > 0) {
       const userData = userCheck[0];
       
-      // Cek apakah user di-ban
       if (userData.isBanned === true) {
         let banMessage = 'Your account has been permanently banned.';
         
-        // Cek jika ban sementara (ada expiry date)
         if (userData.banExpiry) {
           const expiry = new Date(userData.banExpiry);
           const now = new Date();
           
           if (now > expiry) {
-            // Ban sudah expired, auto unban
             await db.update(users)
               .set({ 
                 isBanned: false,
@@ -545,7 +557,6 @@ const app = new Elysia({ prefix: '/api' })
               })
               .where(eq(users.id, userData.id));
           } else {
-            // Ban masih aktif
             const expiryDate = expiry.toLocaleDateString('id-ID', { 
               day: 'numeric', 
               month: 'long', 
@@ -556,7 +567,6 @@ const app = new Elysia({ prefix: '/api' })
             return { error: banMessage };
           }
         } else {
-          // Permanent ban
           banMessage = `Akun Anda telah di-ban permanen. Alasan: ${userData.banReason || 'Melanggar aturan'}. Hubungi administrator untuk informasi lebih lanjut.`;
           set.status = 403;
           return { error: banMessage };
@@ -564,7 +574,6 @@ const app = new Elysia({ prefix: '/api' })
       }
     }
 
-    // Lanjutkan dengan pengecekan password seperti biasa
     const user = await db.select({
       id: users.id,
       username: users.username,
@@ -588,13 +597,11 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Email atau password salah' };
     }
 
-    // Cek ban lagi setelah password valid (untuk jaga-jaga)
     if (userCheck.length > 0 && userCheck[0].isBanned === true) {
       const userData = userCheck[0];
       if (userData.banExpiry) {
         const expiry = new Date(userData.banExpiry);
         if (new Date() > expiry) {
-          // Auto unban jika expired
           await db.update(users)
             .set({ 
               isBanned: false,
@@ -689,13 +696,11 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'User tidak ditemukan' };
     }
 
-    // ✅ TAMBAHKAN PENGECEKAN BAN DI SINI
     if (user[0].isBanned === true) {
       let banMessage = 'Akun Anda telah di-ban permanen.';
       if (user[0].banExpiry) {
         const expiry = new Date(user[0].banExpiry);
         if (new Date() > expiry) {
-          // Auto unban jika expired
           await db.update(users)
             .set({ 
               isBanned: false,
@@ -1803,7 +1808,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Forbidden - Admin access required' };
     }
 
-    // Cek apakah report ada
     const report = await db.select({
       id: reports.id,
       status: reports.status,
@@ -1816,7 +1820,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Report not found' };
     }
 
-    // Update status report
     const newStatus = action === 'accept' ? 'published' : 'archived';
     
     await db.update(reports)
@@ -1826,7 +1829,6 @@ const app = new Elysia({ prefix: '/api' })
       })
       .where(eq(reports.id, id));
     
-    // ✅ Catat aktivitas admin - TANPA id (auto-increment), gunakan description
     const actionType = action === 'accept' ? 'REVIEW_ACCEPT' : 'REVIEW_REJECT';
     const title = action === 'accept' ? `Accepted report: ${report[0].id}` : `Rejected report: ${report[0].id}`;
     
@@ -1887,7 +1889,6 @@ const app = new Elysia({ prefix: '/api' })
       .set(updateData)
       .where(eq(users.id, payload.userId));
     
-    // ✅ Catat aktivitas admin - TANPA id (auto-increment)
     const title = `Updated profile: ${username ? `username changed` : 'profile info updated'}`;
     await db.insert(adminActivities).values({
       adminId: payload.userId,
@@ -1932,7 +1933,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Invalid token' };
     }
 
-    // Ambil aktivitas dari tabel admin_activities
     const activities = await db.select({
       id: adminActivities.id,
       title: adminActivities.title,
@@ -1986,12 +1986,10 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Invalid token' };
     }
 
-    // Hitung tanggal mulai 12 minggu yang lalu (84 hari)
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 84);
     startDate.setHours(0, 0, 0, 0);
 
-    // Ambil semua aktivitas admin dalam 84 hari terakhir
     const activities = await db.select({
       createdAt: adminActivities.createdAt,
     })
@@ -2003,10 +2001,7 @@ const app = new Elysia({ prefix: '/api' })
       )
     );
     
-    // Buat heatmap array (84 items, 12 minggu x 7 hari)
     const heatmap: number[] = new Array(84).fill(0);
-    
-    // Kelompokkan aktivitas per hari
     const now = new Date();
     
     activities.forEach(activity => {
@@ -2327,7 +2322,6 @@ const app = new Elysia({ prefix: '/api' })
 
     console.log('✅ Token valid for user:', payload.userId);
 
-    // Ambil data dari users table
     const user = await db.select({
       id: users.id,
       username: users.username,
@@ -2347,7 +2341,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'User tidak ditemukan' };
     }
 
-    // Ambil data profile dari userProfiles table
     let profile = await db.select({
       bio: userProfiles.bio,
       location: userProfiles.location,
@@ -2360,7 +2353,6 @@ const app = new Elysia({ prefix: '/api' })
 
     let profileData = profile[0] || {};
 
-    // Get user's recent reports
     const userReports = await db.select({
       id: reports.id,
       title: reports.title,
@@ -2376,7 +2368,6 @@ const app = new Elysia({ prefix: '/api' })
     .orderBy(desc(reports.createdAt))
     .limit(5);
 
-    // Get user stats per game
     const gameStats = await db.select({
       game: reports.game,
       count: sql<number>`count(*)`,
@@ -2388,7 +2379,6 @@ const app = new Elysia({ prefix: '/api' })
 
     const totalVotes = gameStats.reduce((sum, g) => sum + (Number(g.votes) || 0), 0);
 
-    // Parse favGames if exists
     let favGamesArray: string[] = ['hsr', 'gi'];
     if (profileData.favGames) {
       try {
@@ -2469,7 +2459,6 @@ const app = new Elysia({ prefix: '/api' })
       favGames?: string[];
     };
 
-    // Update users table
     const userUpdateData: any = {};
     if (username !== undefined) {
       userUpdateData.username = username;
@@ -2482,7 +2471,6 @@ const app = new Elysia({ prefix: '/api' })
         .where(eq(users.id, payload.userId));
     }
 
-    // Check if profile exists in userProfiles
     const existingProfile = await db.select()
       .from(userProfiles)
       .where(eq(userProfiles.userId, payload.userId));
@@ -2499,7 +2487,6 @@ const app = new Elysia({ prefix: '/api' })
     profileUpdateData.updatedAt = new Date();
 
     if (existingProfile.length === 0) {
-      // Create new profile
       await db.insert(userProfiles).values({
         id: randomUUID(),
         userId: payload.userId,
@@ -2514,7 +2501,6 @@ const app = new Elysia({ prefix: '/api' })
         createdAt: new Date(),
       });
     } else if (Object.keys(profileUpdateData).length > 0) {
-      // Update existing profile
       await db.update(userProfiles)
         .set(profileUpdateData)
         .where(eq(userProfiles.userId, payload.userId));
@@ -2561,13 +2547,11 @@ const app = new Elysia({ prefix: '/api' })
 
     const { bannerPhoto, bannerId } = body as { bannerPhoto?: string | null; bannerId?: string };
 
-    // Check if profile exists
     const existingProfile = await db.select()
       .from(userProfiles)
       .where(eq(userProfiles.userId, payload.userId));
 
     if (existingProfile.length === 0) {
-      // Create profile first
       await db.insert(userProfiles).values({
         id: randomUUID(),
         userId: payload.userId,
@@ -2636,10 +2620,8 @@ const app = new Elysia({ prefix: '/api' })
       favGames?: string[];
     };
 
-    // UPDATE users table
     const userUpdateData: any = {};
     if (username !== undefined) {
-      // Cek apakah username sudah dipakai user lain
       const existingUser = await db.select()
         .from(users)
         .where(eq(users.username, username));
@@ -2658,7 +2640,6 @@ const app = new Elysia({ prefix: '/api' })
         .where(eq(users.id, payload.userId));
     }
 
-    // UPDATE or INSERT userProfiles table
     const existingProfile = await db.select({ id: userProfiles.id })
       .from(userProfiles)
       .where(eq(userProfiles.userId, payload.userId));
@@ -2675,7 +2656,6 @@ const app = new Elysia({ prefix: '/api' })
     profileUpdateData.updatedAt = new Date();
 
     if (existingProfile.length === 0) {
-      // Create new profile
       await db.insert(userProfiles).values({
         id: randomUUID(),
         userId: payload.userId,
@@ -2690,7 +2670,6 @@ const app = new Elysia({ prefix: '/api' })
         createdAt: new Date(),
       });
     } else if (Object.keys(profileUpdateData).length > 0) {
-      // Update existing profile
       await db.update(userProfiles)
         .set(profileUpdateData)
         .where(eq(userProfiles.userId, payload.userId));
@@ -2758,7 +2737,6 @@ const app = new Elysia({ prefix: '/api' })
         shortId = String(index + 1).padStart(3, '0');
       }
       
-      // Determine the display type based on report type
       let displayType: string;
       switch (r.type) {
         case 'guide':
@@ -3092,7 +3070,6 @@ const app = new Elysia({ prefix: '/api' })
         })
         .where(eq(reports.id, id));
       
-      // Catat aktivitas admin - TANPA id (auto-increment)
       await db.insert(adminActivities).values({
         adminId: payload.userId,
         actionType: 'EVENT_APPROVE',
@@ -3167,7 +3144,6 @@ const app = new Elysia({ prefix: '/api' })
         })
         .where(eq(reports.id, id));
       
-      // Catat aktivitas admin - TANPA id (auto-increment), gunakan description
       await db.insert(adminActivities).values({
         adminId: payload.userId,
         actionType: 'EVENT_REJECT',
@@ -3381,7 +3357,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Forbidden - Admin access required' };
     }
 
-    // Check if user exists
     const targetUser = await db.select({ id: users.id, email: users.email })
       .from(users)
       .where(eq(users.id, userId));
@@ -3391,7 +3366,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'User not found' };
     }
 
-    // Catat aktivitas admin
     await db.insert(adminActivities).values({
       adminId: payload.userId,
       actionType: 'WARN_USER',
@@ -3421,7 +3395,7 @@ const app = new Elysia({ prefix: '/api' })
   })
 })
 
-// POST /admin/ban-user - Ban a user (DIPERBAIKI - tanpa raw SQL)
+// POST /admin/ban-user - Ban a user
 .post('/admin/ban-user', async ({ body, cookie: { token }, set }) => {
   try {
     const { userId, username, reason, duration } = body as { 
@@ -3454,7 +3428,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Forbidden - Admin access required' };
     }
 
-    // Check if user exists
     const targetUser = await db.select({ id: users.id, email: users.email })
       .from(users)
       .where(eq(users.id, userId));
@@ -3464,7 +3437,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'User not found' };
     }
 
-    // Calculate ban expiry date
     let banExpiry: Date | null = null;
     const now = new Date();
     if (duration === '1day') {
@@ -3475,7 +3447,6 @@ const app = new Elysia({ prefix: '/api' })
       banExpiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     }
 
-    // Update user with ban information menggunakan Drizzle biasa
     await db.update(users)
       .set({ 
         isBanned: true,
@@ -3484,7 +3455,6 @@ const app = new Elysia({ prefix: '/api' })
       })
       .where(eq(users.id, userId));
 
-    // Catat aktivitas admin
     await db.insert(adminActivities).values({
       adminId: payload.userId,
       actionType: 'BAN_USER',
@@ -3549,7 +3519,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Forbidden - Admin access required' };
     }
 
-    // Update user - remove ban menggunakan Drizzle biasa
     await db.update(users)
       .set({ 
         isBanned: false,
@@ -3558,7 +3527,6 @@ const app = new Elysia({ prefix: '/api' })
       })
       .where(eq(users.id, userId));
 
-    // Catat aktivitas admin
     await db.insert(adminActivities).values({
       adminId: payload.userId,
       actionType: 'UNBAN_USER',
@@ -3611,7 +3579,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Forbidden - Admin access required' };
     }
 
-    // Ambil data user menggunakan Drizzle biasa
     const targetUser = await db.select({
       isBanned: users.isBanned,
       banReason: users.banReason,
@@ -3629,12 +3596,10 @@ const app = new Elysia({ prefix: '/api' })
     let isBanned = userData.isBanned || false;
     let banExpiry = userData.banExpiry;
     
-    // Check if temporary ban has expired
     if (isBanned && banExpiry) {
       const now = new Date();
       const expiry = new Date(banExpiry);
       if (now > expiry) {
-        // Auto-unban expired ban
         await db.update(users)
           .set({ 
             isBanned: false,
@@ -3679,10 +3644,8 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Invalid token' };
     }
 
-    // Get all puzzles
     const allPuzzles = await db.select().from(puzzles).orderBy(asc(puzzles.orderIndex));
     
-    // Get solved puzzle IDs for this user
     const solvedPuzzles = await db.select({ puzzleId: userPuzzles.puzzleId })
       .from(userPuzzles)
       .where(and(
@@ -3692,10 +3655,8 @@ const app = new Elysia({ prefix: '/api' })
     
     const solvedIds = new Set(solvedPuzzles.map(sp => sp.puzzleId));
     
-    // Filter out solved puzzles
     const availablePuzzles = allPuzzles.filter(p => !solvedIds.has(p.id));
     
-    // Parse options for each puzzle
     const puzzlesWithOptions = availablePuzzles.map(p => ({
       ...p,
       options: p.options ? JSON.parse(p.options) : undefined,
@@ -3765,7 +3726,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Invalid token' };
     }
 
-    // Check if already solved
     const existing = await db.select()
       .from(userPuzzles)
       .where(and(
@@ -3777,7 +3737,6 @@ const app = new Elysia({ prefix: '/api' })
       return { success: true, message: 'Already solved' };
     }
 
-    // Record solve
     await db.insert(userPuzzles).values({
       userId: payload.userId,
       puzzleId: puzzleId,
@@ -3785,14 +3744,12 @@ const app = new Elysia({ prefix: '/api' })
       solvedAt: new Date(),
     });
     
-    // Update puzzle solvedBy count
     await db.execute(sql`
       UPDATE puzzles 
       SET solved_by = solved_by + 1 
       WHERE id = ${puzzleId}
     `);
     
-    // Update user XP
     await db.update(users)
       .set({ xp: sql`${users.xp} + ${points}` })
       .where(eq(users.id, payload.userId));
@@ -3827,7 +3784,6 @@ const app = new Elysia({ prefix: '/api' })
       return { error: 'Invalid token' };
     }
 
-    // Get leaderboard from userPuzzles aggregated
     const leaderboardResult = await db.execute(sql`
       SELECT 
         u.username,
@@ -3854,7 +3810,6 @@ const app = new Elysia({ prefix: '/api' })
     return { success: true, leaderboard: formattedLeaderboard };
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
-    // Return empty array if error
     return { success: true, leaderboard: [] };
   }
 })
@@ -3892,7 +3847,7 @@ const app = new Elysia({ prefix: '/api' })
       .from(puzzles);
     
     const pointsRows = totalPointsResult as any;
-    
+     
     return {
       success: true,
       stats: {
@@ -3906,6 +3861,9 @@ const app = new Elysia({ prefix: '/api' })
     return { success: true, stats: { solved: 0, total: 0, points: 0 } };
   }
 })
+
+
+
 
 // =============================================
 // EXPORT UNTUK NEXT.JS
