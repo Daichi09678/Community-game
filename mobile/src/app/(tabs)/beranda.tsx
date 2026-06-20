@@ -1,3 +1,4 @@
+// ============ app/(tabs)/beranda.tsx ============
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -7,14 +8,14 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
-  FlatList,
   ActivityIndicator,
-  Image,
+  RefreshControl,
+  Platform,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 
 // ============ Types ============
 interface StatCard {
@@ -61,9 +62,22 @@ interface GameCoverage {
   fill: string;
 }
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// ============ Dynamic API Base URL ============
+const getApiBaseUrl = (): string => {
+  if (Platform.OS === 'web') {
+    return 'http://localhost:3001/api';
+  }
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3001/api';
+  }
+  return 'http://localhost:3001/api';
+};
 
-// ============ Game Labels ============
+const API_BASE_URL = getApiBaseUrl();
+
+console.log(`📡 [Dashboard] Platform: ${Platform.OS}, API URL: ${API_BASE_URL}`);
+
+// ============ Constants ============
 const gameLabels: Record<string, string> = {
   all: 'All Games',
   hsr: 'Honkai: Star Rail',
@@ -80,9 +94,40 @@ const gameColors: Record<string, string> = {
   hi3: '#E05C7A',
 };
 
+const typeFilters = [
+  { key: 'all', label: 'All' },
+  { key: 'guide', label: 'Guides' },
+  { key: 'event', label: 'Events' },
+  { key: 'puzzle', label: 'Puzzles' },
+  { key: 'build', label: 'Builds' },
+];
+
+const games = ['all', 'hsr', 'gi', 'zzz', 'hi3'];
+
+const { width } = Dimensions.get('window');
+
+// ============ Logo Component ============
+const LogoIcon = () => (
+  <View style={styles.logoContainer}>
+    <View style={styles.logoHexWrapper}>
+      <View style={styles.logoHexBorder} />
+      <View style={styles.logoHexInner}>
+        <View style={styles.logoHexDot} />
+        <View style={styles.logoHexCross}>
+          <View style={styles.logoHexCrossH} />
+          <View style={styles.logoHexCrossV} />
+        </View>
+      </View>
+    </View>
+    <Text style={styles.logoText}>Hoyoverse Hub</Text>
+  </View>
+);
+
 // ============ Main Component ============
 export default function Beranda() {
+  // State
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [activeGame, setActiveGame] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -94,61 +139,95 @@ export default function Beranda() {
   const [activityData, setActivityData] = useState<ActivityData | null>(null);
   const [gameCoverage, setGameCoverage] = useState<GameCoverage[]>([]);
   const [widgetsLoading, setWidgetsLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const searchInputRef = useRef<TextInput>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
 
     fetchDashboardData();
-    fetchUser();
   }, []);
 
-  // Fetch user data
-  const fetchUser = async () => {
-    try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setUser(JSON.parse(userData));
+  // Cleanup timer
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
+    };
+  }, []);
+
+  // ============ API Helper with timeout ============
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout: number = 10000) => {
+    const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+    
+    console.log(`🌐 Fetching: ${fullUrl}`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(fullUrl, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...options.headers,
+        },
+      });
+      clearTimeout(timeoutId);
+      return response;
     } catch (error) {
-      console.error('Error fetching user:', error);
+      clearTimeout(timeoutId);
+      throw error;
     }
   };
 
-  // Fetch dashboard data
+  // ============ Fetch Dashboard Data ============
   const fetchDashboardData = async () => {
     setLoading(true);
+    setApiError(null);
+    
     try {
-      const statsRes = await fetch(`${API_BASE_URL}/dashboard/stats`);
+      console.log('📡 Fetching dashboard stats...');
+      
+      const statsRes = await fetchWithTimeout('/dashboard/stats', {}, 8000);
+      
       if (statsRes.ok) {
         const stats = await statsRes.json();
-        if (stats.success && stats.data) setStatsData(stats.data);
+        if (stats.success && stats.data) {
+          setStatsData(stats.data);
+        } else {
+          setStatsData([
+            { label: 'Total Reports', value: '0', change: 'No reports yet', accent: '#C8A96E' },
+            { label: 'Active Events', value: '0', change: 'No events yet', accent: '#4ECDC4' },
+            { label: 'Puzzles Solved', value: '0', change: 'No puzzles yet', accent: '#A855F7' },
+            { label: 'Active Travelers', value: '0', change: 'No users yet', accent: '#C84040' },
+          ]);
+        }
       }
 
-      await fetchReports();
+      await fetchReports(activeGame, activeFilter, searchQuery);
       await fetchWidgetsData();
-    } catch (error) {
-      console.error('Error fetching dashboard:', error);
+      
+    } catch (error: any) {
+      console.error('❌ Error fetching dashboard:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  // ============ Fetch Reports ============
   const fetchReports = async (game?: string, type?: string, search?: string) => {
     setReportsLoading(true);
     try {
@@ -156,12 +235,13 @@ export default function Beranda() {
       const typeParam = type !== undefined ? type : activeFilter;
       const searchParam = search !== undefined ? search : searchQuery;
 
-      let url = `${API_BASE_URL}/dashboard/reports?game=${gameParam}&type=${typeParam}&page=1&limit=20`;
+      let url = `/dashboard/reports?game=${gameParam}&type=${typeParam}&page=1&limit=20`;
       if (searchParam && searchParam.trim()) {
         url += `&search=${encodeURIComponent(searchParam.trim())}`;
       }
 
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, {}, 8000);
+      
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.reports) {
@@ -171,87 +251,203 @@ export default function Beranda() {
         }
       }
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      console.error('❌ Error fetching reports:', error);
+      setReportsData([]);
     } finally {
       setReportsLoading(false);
     }
   };
 
+  // ============ Fetch Widgets Data ============
   const fetchWidgetsData = async () => {
     setWidgetsLoading(true);
     try {
-      const [topRes, tagsRes, activityRes, coverageRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/dashboard/top-reports`),
-        fetch(`${API_BASE_URL}/dashboard/trending-tags`),
-        fetch(`${API_BASE_URL}/dashboard/activity`),
-        fetch(`${API_BASE_URL}/dashboard/game-coverage`),
-      ]);
+      const endpoints = [
+        '/dashboard/top-reports',
+        '/dashboard/trending-tags',
+        '/dashboard/activity',
+        '/dashboard/game-coverage',
+      ];
 
-      if (topRes.ok) {
-        const top = await topRes.json();
+      const responses = await Promise.allSettled(
+        endpoints.map(url => fetchWithTimeout(url, {}, 6000))
+      );
+
+      if (responses[0].status === 'fulfilled' && responses[0].value.ok) {
+        const top = await responses[0].value.json();
         if (top.success && top.data) setTopReports(top.data);
       }
-      if (tagsRes.ok) {
-        const tags = await tagsRes.json();
+
+      if (responses[1].status === 'fulfilled' && responses[1].value.ok) {
+        const tags = await responses[1].value.json();
         if (tags.success && tags.data) setTrendingTags(tags.data);
       }
-      if (activityRes.ok) {
-        const activity = await activityRes.json();
+
+      if (responses[2].status === 'fulfilled' && responses[2].value.ok) {
+        const activity = await responses[2].value.json();
         if (activity.success && activity.data) setActivityData(activity.data);
       }
-      if (coverageRes.ok) {
-        const coverage = await coverageRes.json();
+
+      if (responses[3].status === 'fulfilled' && responses[3].value.ok) {
+        const coverage = await responses[3].value.json();
         if (coverage.success && coverage.data) setGameCoverage(coverage.data);
       }
     } catch (error) {
-      console.error('Error fetching widgets:', error);
+      console.error('❌ Error fetching widgets:', error);
     } finally {
       setWidgetsLoading(false);
     }
   };
 
-  // Fetch when filters or search change
-  useEffect(() => {
-    if (!loading) {
-      fetchReports(activeGame, activeFilter, searchQuery);
-    }
-  }, [activeGame, activeFilter, searchQuery]);
+  // ============ Refresh ============
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setApiError(null);
+    await fetchDashboardData();
+    setRefreshing(false);
+  };
 
+  // ============ Handlers ============
   const handleGameChange = (game: string) => {
     setActiveGame(game);
     setActiveFilter('all');
     setSearchQuery('');
+    fetchReports(game, 'all', '');
   };
 
   const handleFilterChange = (filter: string) => {
     setActiveFilter(filter);
     setSearchQuery('');
+    fetchReports(activeGame, filter, '');
   };
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    setActiveFilter('all');
-    setActiveGame('all');
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    if (text.trim() === '') {
+      setIsSearching(false);
+      setActiveFilter('all');
+      setActiveGame('all');
+      fetchReports('all', 'all', '');
+      return;
+    }
+    
+    setIsSearching(true);
+    
+    debounceTimerRef.current = setTimeout(() => {
+      setActiveFilter('all');
+      setActiveGame('all');
+      fetchReports('all', 'all', text);
+      setIsSearching(false);
+    }, 500);
   };
 
   const clearSearch = () => {
     setSearchQuery('');
+    setIsSearching(false);
+    setActiveFilter('all');
+    setActiveGame('all');
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    fetchReports('all', 'all', '');
+    searchInputRef.current?.blur();
   };
 
   const handleTagClick = (tag: string) => {
-    setSearchQuery(tag.replace('#', ''));
+    const searchTerm = tag.replace('#', '');
+    setSearchQuery(searchTerm);
     setActiveFilter('all');
     setActiveGame('all');
+    fetchReports('all', 'all', searchTerm);
   };
+
+  useEffect(() => {
+    if (!loading) {
+      const timeoutId = setTimeout(() => {
+        fetchReports(activeGame, activeFilter, searchQuery);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [activeGame, activeFilter]);
 
   const accentColor = gameColors[activeGame] || '#C8A96E';
 
-  // ============ Render Functions ============
+  // ============ Render Components ============
 
-  // Render Game Pills
+  // ============ Topbar ============
+  const renderTopbar = () => (
+    <View style={styles.topbar}>
+      <View style={styles.topbarLeft}>
+        <LogoIcon />
+        <View style={styles.userBadge}>
+          <Text style={styles.userBadgeText}>● USER</Text>
+        </View>
+      </View>
+      <View style={styles.topbarRight}>
+        <View style={styles.searchWrapper}>
+          <Ionicons name="search-outline" size={16} color="#5A5248" />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search reports, guides..."
+            placeholderTextColor="#5A5248"
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+            returnKeyType="search"
+            onSubmitEditing={() => fetchReports(activeGame, activeFilter, searchQuery)}
+          />
+          {isSearching && (
+            <ActivityIndicator size="small" color="#C8A96E" style={styles.searchSpinner} />
+          )}
+          {searchQuery !== '' && !isSearching && (
+            <TouchableOpacity onPress={clearSearch}>
+              <Ionicons name="close-outline" size={18} color="#5A5248" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
+  // ============ Header Subtitle ============
+  const renderHeaderSubtitle = () => (
+    <View style={styles.headerSubtitleContainer}>
+      <Text style={styles.headerSubtitle}>
+        {gameLabels[activeGame]} · Last updated: 3 hours ago
+        {searchQuery && <Text style={styles.searchIndicator}> · Searching: "{searchQuery}"</Text>}
+      </Text>
+    </View>
+  );
+
+  // ============ Stat Cards ============
+  const renderStatCards = () => {
+    const displayStats = statsData.length > 0 ? statsData : [
+      { label: 'Total Reports', value: '0', change: 'No data', accent: '#C8A96E' },
+      { label: 'Active Events', value: '0', change: 'No data', accent: '#4ECDC4' },
+      { label: 'Puzzles Solved', value: '0', change: 'No data', accent: '#A855F7' },
+      { label: 'Active Travelers', value: '0', change: 'No data', accent: '#C84040' },
+    ];
+
+    return (
+      <View style={styles.statsGrid}>
+        {displayStats.map((card, i) => (
+          <View key={i} style={[styles.statCard, { borderTopColor: card.accent }]}>
+            <Text style={styles.statLabel}>{card.label}</Text>
+            <Text style={[styles.statValue, { color: card.accent }]}>{card.value}</Text>
+            <Text style={styles.statChange}>{card.change}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  // ============ Game Pills ============
   const renderGamePills = () => {
-    const games = ['all', 'hsr', 'gi', 'zzz', 'hi3'];
-    
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.gamePillsContainer}>
         {games.map((g) => {
@@ -283,19 +479,11 @@ export default function Beranda() {
     );
   };
 
-  // Render Type Filters
+  // ============ Type Filters ============
   const renderTypeFilters = () => {
-    const filters = [
-      { key: 'all', label: 'All' },
-      { key: 'guide', label: 'Guides' },
-      { key: 'event', label: 'Events' },
-      { key: 'puzzle', label: 'Puzzles' },
-      { key: 'build', label: 'Builds' },
-    ];
-
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
-        {filters.map((f) => (
+        {typeFilters.map((f) => (
           <TouchableOpacity
             key={f.key}
             style={[
@@ -320,29 +508,7 @@ export default function Beranda() {
     );
   };
 
-  // Render Stat Cards
-  const renderStatCards = () => {
-    const displayStats = statsData.length > 0 ? statsData : [
-      { label: 'Total Reports', value: '0', change: 'Loading...', accent: '#C8A96E' },
-      { label: 'Active Events', value: '0', change: 'Loading...', accent: '#4ECDC4' },
-      { label: 'Puzzles Solved', value: '0', change: 'Loading...', accent: '#A855F7' },
-      { label: 'Active Travelers', value: '0', change: 'Loading...', accent: '#C84040' },
-    ];
-
-    return (
-      <View style={styles.statsGrid}>
-        {displayStats.map((card, i) => (
-          <View key={i} style={[styles.statCard, { borderTopColor: card.accent }]}>
-            <Text style={styles.statLabel}>{card.label}</Text>
-            <Text style={[styles.statValue, { color: card.accent }]}>{card.value}</Text>
-            <Text style={styles.statChange}>{card.change}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  };
-
-  // Render Reports Table
+  // ============ Reports List ============
   const renderReports = () => {
     if (reportsLoading) {
       return (
@@ -357,8 +523,13 @@ export default function Beranda() {
       return (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
-            {searchQuery ? `No reports found for "#${searchQuery}"` : 'No reports found'}
+            {searchQuery ? `No reports found for "${searchQuery}"` : 'No reports found'}
           </Text>
+          {searchQuery !== '' && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearSearchButton}>
+              <Text style={styles.clearSearchButtonText}>Clear search</Text>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -402,8 +573,17 @@ export default function Beranda() {
     );
   };
 
-  // Render Top Reports Widget
+  // ============ Top Reports Widget ============
   const renderTopReports = () => {
+    if (widgetsLoading) {
+      return (
+        <View style={styles.widgetCard}>
+          <Text style={styles.widgetTitle}>Top Reports</Text>
+          <ActivityIndicator color="#C8A96E" size="small" />
+        </View>
+      );
+    }
+
     const data = topReports.length > 0 ? topReports : [
       { id: 1, title: 'Penacony Dreamscape Guide', score: 1247 },
       { id: 2, title: 'Arlecchino Boss Fight', score: 892 },
@@ -434,8 +614,19 @@ export default function Beranda() {
     );
   };
 
-  // Render Trending Tags Widget
+  // ============ Trending Tags Widget ============
   const renderTrendingTags = () => {
+    if (widgetsLoading) {
+      return (
+        <View style={styles.widgetCard}>
+          <View style={styles.widgetHeader}>
+            <Text style={styles.widgetTitle}>Trending Tags</Text>
+          </View>
+          <ActivityIndicator color="#C8A96E" size="small" />
+        </View>
+      );
+    }
+
     const tags = trendingTags.length > 0 ? trendingTags : [
       { label: '#Exploration', variant: 'gold', count: 234 },
       { label: '#Lore', variant: 'cyan', count: 189 },
@@ -461,10 +652,7 @@ export default function Beranda() {
           {tags.slice(0, 8).map((tag, i) => (
             <TouchableOpacity
               key={i}
-              style={[
-                styles.tag,
-                { borderColor: 'rgba(200,169,110,0.2)', backgroundColor: 'rgba(200,169,110,0.08)' },
-              ]}
+              style={styles.tag}
               onPress={() => handleTagClick(tag.label)}
             >
               <Text style={[styles.tagText, { color: tagColors[tag.variant] || '#C8A96E' }]}>
@@ -477,8 +665,19 @@ export default function Beranda() {
     );
   };
 
-  // Render Activity Chart
+  // ============ Activity Chart ============
   const renderActivityChart = () => {
+    if (widgetsLoading) {
+      return (
+        <View style={styles.widgetCard}>
+          <View style={styles.widgetHeader}>
+            <Text style={styles.widgetTitle}>Activity This Week</Text>
+          </View>
+          <ActivityIndicator color="#C8A96E" size="small" />
+        </View>
+      );
+    }
+
     const data = activityData || {
       days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
       vals: [0, 0, 0, 0, 0, 0, 0],
@@ -514,8 +713,17 @@ export default function Beranda() {
     );
   };
 
-  // Render Game Coverage
+  // ============ Game Coverage ============
   const renderGameCoverage = () => {
+    if (widgetsLoading) {
+      return (
+        <View style={styles.widgetCard}>
+          <Text style={styles.widgetTitle}>Game Coverage</Text>
+          <ActivityIndicator color="#C8A96E" size="small" />
+        </View>
+      );
+    }
+
     const coverage = gameCoverage.length > 0 ? gameCoverage : [
       { label: 'Honkai: Star Rail', pct: 45, fill: 'bg-[#4ECDC4]' },
       { label: 'Genshin Impact', pct: 30, fill: 'bg-[#6DD18A]' },
@@ -565,95 +773,60 @@ export default function Beranda() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
-      
-      <Animated.ScrollView
-        style={[styles.scrollView, { opacity: fadeAnim }]}
+      <StatusBar barStyle="light-content" backgroundColor="#050810" />
+
+      {renderTopbar()}
+
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#C8A96E" />
+        }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Hoyoverse Hub — Dashboard</Text>
-            <Text style={styles.headerSubtitle}>
-              {gameLabels[activeGame]} · Last updated: 3 hours ago
-              {searchQuery && <Text style={styles.searchIndicator}> · Searching: "{searchQuery}"</Text>}
-            </Text>
-          </View>
-        </View>
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {renderHeaderSubtitle()}
+          {renderStatCards()}
+          {renderGamePills()}
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchWrapper}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search reports, guides, events..."
-              placeholderTextColor="#5A5248"
-              value={searchQuery}
-              onChangeText={handleSearch}
-            />
-            {searchQuery !== '' && (
+          {searchQuery !== '' && (
+            <View style={styles.searchResultIndicator}>
+              <Text style={styles.searchResultText}>
+                Search results for: <Text style={styles.searchResultQuery}>"{searchQuery}"</Text>
+                <Text style={styles.searchResultCount}> ({reportsData.length} reports)</Text>
+              </Text>
               <TouchableOpacity onPress={clearSearch}>
-                <Text style={styles.clearSearch}>✕</Text>
+                <Text style={styles.clearSearchResult}>✕ Clear</Text>
               </TouchableOpacity>
-            )}
+            </View>
+          )}
+
+          {renderTypeFilters()}
+
+          <View style={styles.reportsSection}>
+            <View style={styles.reportsHeader}>
+              <Text style={styles.reportsTitle}>
+                Latest Reports
+                {searchQuery && (
+                  <Text style={styles.filteredTag}> filtered by #{searchQuery}</Text>
+                )}
+              </Text>
+              <Text style={styles.reportsCount}>{reportsData.length} items</Text>
+            </View>
+            {renderReports()}
           </View>
-          <TouchableOpacity
-            style={styles.writeButton}
-            onPress={() => router.push('/pengaduan' as any)}
-          >
-            <Text style={styles.writeButtonText}>+ Write Report</Text>
-          </TouchableOpacity>
-        </View>
 
-        {/* Stat Cards */}
-        {renderStatCards()}
-
-        {/* Game Pills */}
-        {renderGamePills()}
-
-        {/* Search Result Indicator */}
-        {searchQuery !== '' && (
-          <View style={styles.searchResultIndicator}>
-            <Text style={styles.searchResultText}>
-              Search results for: <Text style={styles.searchResultQuery}>"{searchQuery}"</Text>
-              <Text style={styles.searchResultCount}> ({reportsData.length} reports found)</Text>
-            </Text>
-            <TouchableOpacity onPress={clearSearch}>
-              <Text style={styles.clearSearchResult}>✕ Clear search</Text>
-            </TouchableOpacity>
+          <View style={styles.widgetsContainer}>
+            {renderTopReports()}
+            {renderTrendingTags()}
+            {renderActivityChart()}
+            {renderGameCoverage()}
           </View>
-        )}
 
-        {/* Type Filters */}
-        {renderTypeFilters()}
-
-        {/* Main Content - Reports */}
-        <View style={styles.reportsSection}>
-          <View style={styles.reportsHeader}>
-            <Text style={styles.reportsTitle}>
-              Latest Reports
-              {searchQuery && (
-                <Text style={styles.filteredTag}> filtered by #{searchQuery}</Text>
-              )}
-            </Text>
-          </View>
-          {renderReports()}
-        </View>
-
-        {/* Widgets */}
-        <View style={styles.widgetsContainer}>
-          {renderTopReports()}
-          {renderTrendingTags()}
-          {renderActivityChart()}
-          {renderGameCoverage()}
-        </View>
-
-        {/* Bottom Padding */}
-        <View style={styles.bottomPadding} />
-      </Animated.ScrollView>
+          <View style={styles.bottomPadding} />
+        </Animated.View>
+      </ScrollView>
     </View>
   );
 }
@@ -669,7 +842,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   loadingScreen: {
     flex: 1,
@@ -679,78 +852,153 @@ const styles = StyleSheet.create({
   },
   loadingScreenText: {
     color: '#5A5248',
-    fontFamily: 'SpaceMono',
     fontSize: 12,
     marginTop: 12,
     letterSpacing: 2,
   },
-  header: {
-    marginBottom: 16,
-  },
-  headerTitle: {
-    color: '#E8E0CC',
-    fontSize: 18,
-    fontFamily: 'Cinzel',
-    fontWeight: '600',
-  },
-  headerSubtitle: {
-    color: '#5A5248',
-    fontSize: 12,
-    fontFamily: 'Rajdhani',
-    marginTop: 2,
-  },
-  searchIndicator: {
-    color: '#C8A96E',
-  },
-  searchContainer: {
+
+  // ============ Topbar ============
+  topbar: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(5,8,16,0.85)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(200,169,110,0.12)',
+    minHeight: 56,
   },
+  topbarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  topbarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  // ============ Logo ============
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoHexWrapper: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  logoHexBorder: {
+    width: 30,
+    height: 30,
+    borderWidth: 1.5,
+    borderColor: '#C8A96E',
+    transform: [{ rotate: '30deg' }],
+    position: 'absolute',
+    borderRadius: 2,
+  },
+  logoHexInner: {
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  logoHexDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(200,169,110,0.25)',
+    borderWidth: 1,
+    borderColor: '#C8A96E',
+  },
+  logoHexCross: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoHexCrossH: {
+    width: 10,
+    height: 1,
+    backgroundColor: '#C8A96E',
+    opacity: 0.35,
+  },
+  logoHexCrossV: {
+    width: 1,
+    height: 10,
+    backgroundColor: '#C8A96E',
+    opacity: 0.35,
+    position: 'absolute',
+  },
+  logoText: {
+    color: '#C8A96E',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // ============ User Badge ============
+  userBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(78,205,196,0.35)',
+    backgroundColor: 'rgba(78,205,196,0.08)',
+    borderRadius: 2,
+  },
+  userBadgeText: {
+    color: '#4ECDC4',
+    fontSize: 7,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+
+  // ============ Search ============
   searchWrapper: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#0C1220',
     borderWidth: 1,
-    borderColor: 'rgba(200,169,110,0.15)',
+    borderColor: 'rgba(200,169,110,0.12)',
     borderRadius: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  searchIcon: {
-    fontSize: 14,
-    marginRight: 10,
-    color: '#5A5248',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 36,
   },
   searchInput: {
     flex: 1,
     color: '#E8E0CC',
-    fontSize: 14,
-    fontFamily: 'Rajdhani',
-    padding: 0,
-  },
-  clearSearch: {
-    color: '#5A5248',
-    fontSize: 14,
-    paddingHorizontal: 4,
-  },
-  writeButton: {
-    backgroundColor: '#C8A96E',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  writeButtonText: {
-    color: '#050810',
     fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Rajdhani',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
+  searchSpinner: {
+    marginLeft: 4,
+  },
+
+  // ============ Header Subtitle ============
+  headerSubtitleContainer: {
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  headerSubtitle: {
+    color: '#5A5248',
+    fontSize: 10,
+  },
+  searchIndicator: {
+    color: '#C8A96E',
+  },
+
+  // ============ Stat Cards ============
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -776,7 +1024,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   statValue: {
-    fontFamily: 'SpaceMono',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -785,6 +1032,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 4,
   },
+
+  // ============ Game Pills ============
   gamePillsContainer: {
     marginBottom: 16,
   },
@@ -798,10 +1047,11 @@ const styles = StyleSheet.create({
   gamePillText: {
     fontSize: 11,
     fontWeight: '700',
-    fontFamily: 'Rajdhani',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
+
+  // ============ Search Result Indicator ============
   searchResultIndicator: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -816,7 +1066,6 @@ const styles = StyleSheet.create({
   searchResultText: {
     color: '#5A5248',
     fontSize: 11,
-    fontFamily: 'Rajdhani',
   },
   searchResultQuery: {
     color: '#E8E0CC',
@@ -828,8 +1077,9 @@ const styles = StyleSheet.create({
   clearSearchResult: {
     color: '#E05C7A',
     fontSize: 11,
-    fontFamily: 'Rajdhani',
   },
+
+  // ============ Type Filters ============
   filterContainer: {
     marginBottom: 16,
   },
@@ -843,10 +1093,11 @@ const styles = StyleSheet.create({
   filterPillText: {
     fontSize: 11,
     fontWeight: '700',
-    fontFamily: 'Rajdhani',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
+
+  // ============ Reports Section ============
   reportsSection: {
     marginBottom: 24,
   },
@@ -859,13 +1110,15 @@ const styles = StyleSheet.create({
   reportsTitle: {
     color: '#E8E0CC',
     fontSize: 14,
-    fontFamily: 'Cinzel',
     fontWeight: '600',
+  },
+  reportsCount: {
+    color: '#5A5248',
+    fontSize: 10,
   },
   filteredTag: {
     color: '#C8A96E',
     fontSize: 10,
-    fontFamily: 'SpaceMono',
   },
   loadingContainer: {
     backgroundColor: '#0C1220',
@@ -878,7 +1131,6 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#5A5248',
     marginTop: 12,
-    fontFamily: 'Rajdhani',
   },
   emptyContainer: {
     backgroundColor: '#0C1220',
@@ -891,8 +1143,21 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#5A5248',
     fontSize: 12,
-    fontFamily: 'SpaceMono',
   },
+  clearSearchButton: {
+    marginTop: 12,
+    backgroundColor: 'rgba(200,169,110,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  clearSearchButtonText: {
+    color: '#C8A96E',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // ============ Table ============
   tableContainer: {
     backgroundColor: '#0C1220',
     borderWidth: 1,
@@ -916,7 +1181,6 @@ const styles = StyleSheet.create({
     color: '#E8E0CC',
     fontSize: 14,
     fontWeight: '600',
-    fontFamily: 'Rajdhani',
     marginRight: 8,
   },
   reportBadges: {
@@ -932,7 +1196,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: '#C8A96E',
-    fontFamily: 'Rajdhani',
     letterSpacing: 0.5,
   },
   reportFooter: {
@@ -958,13 +1221,11 @@ const styles = StyleSheet.create({
   avatarText: {
     color: '#C8A96E',
     fontSize: 9,
-    fontFamily: 'Cinzel',
     fontWeight: '700',
   },
   authorName: {
     color: '#9A8F78',
     fontSize: 12,
-    fontFamily: 'Rajdhani',
   },
   reportStats: {
     flexDirection: 'row',
@@ -974,13 +1235,13 @@ const styles = StyleSheet.create({
   votesText: {
     color: '#4ECDC4',
     fontSize: 11,
-    fontFamily: 'SpaceMono',
   },
   dateText: {
     color: '#5A5248',
     fontSize: 11,
-    fontFamily: 'SpaceMono',
   },
+
+  // ============ Widgets ============
   widgetsContainer: {
     gap: 16,
   },
@@ -994,7 +1255,6 @@ const styles = StyleSheet.create({
   widgetTitle: {
     color: '#E8E0CC',
     fontSize: 13,
-    fontFamily: 'Cinzel',
     fontWeight: '600',
     marginBottom: 12,
   },
@@ -1007,7 +1267,6 @@ const styles = StyleSheet.create({
   viewAllText: {
     color: '#C8A96E',
     fontSize: 9,
-    fontFamily: 'SpaceMono',
   },
   topReportItem: {
     flexDirection: 'row',
@@ -1017,7 +1276,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(200,169,110,0.06)',
   },
   topReportRank: {
-    fontFamily: 'SpaceMono',
     fontSize: 10,
     minWidth: 24,
   },
@@ -1025,13 +1283,11 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#9A8F78',
     fontSize: 11,
-    fontFamily: 'Rajdhani',
     marginHorizontal: 8,
   },
   topReportScore: {
     color: '#4ECDC4',
     fontSize: 10,
-    fontFamily: 'SpaceMono',
   },
   tagsContainer: {
     flexDirection: 'row',
@@ -1042,13 +1298,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
+    borderColor: 'rgba(200,169,110,0.2)',
     borderRadius: 2,
+    backgroundColor: 'rgba(200,169,110,0.08)',
     margin: 2,
   },
   tagText: {
     fontSize: 9,
     fontWeight: '600',
-    fontFamily: 'Rajdhani',
   },
   liveIndicator: {
     flexDirection: 'row',
@@ -1064,7 +1321,6 @@ const styles = StyleSheet.create({
   liveText: {
     color: '#4ECDC4',
     fontSize: 8,
-    fontFamily: 'SpaceMono',
   },
   chartContainer: {
     flexDirection: 'row',
@@ -1085,7 +1341,6 @@ const styles = StyleSheet.create({
   barLabel: {
     color: '#5A5248',
     fontSize: 7,
-    fontFamily: 'SpaceMono',
   },
   coverageItem: {
     marginBottom: 12,
@@ -1098,12 +1353,10 @@ const styles = StyleSheet.create({
   coverageLabel: {
     color: '#9A8F78',
     fontSize: 10,
-    fontFamily: 'Rajdhani',
   },
   coveragePercent: {
     color: '#5A5248',
     fontSize: 9,
-    fontFamily: 'SpaceMono',
   },
   coverageBar: {
     height: 4,
