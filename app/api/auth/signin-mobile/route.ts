@@ -1,4 +1,5 @@
 // app/api/auth/signin-mobile/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/drizzle/schema';
@@ -21,45 +22,26 @@ async function generateToken(userId: string, email: string): Promise<string> {
   return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' });
 }
 
-// ========== Dynamic CORS Headers ==========
-function getCorsHeaders(origin: string | null) {
-  const allowedOrigins = [
-    'http://localhost:8081',
-    'http://localhost:3000',
-    'http://10.0.2.2:8081',
-    'http://192.168.1.100:8081', // Tambahkan IP Anda jika perlu
-  ];
-  
-  // Jika origin ada di daftar, gunakan origin tersebut
-  // Jika tidak, gunakan default
-  const allowedOrigin = origin && allowedOrigins.includes(origin) ? origin : 'http://localhost:8081';
-  
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, Accept',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age': '86400',
-  };
-}
+// ========== CORS Headers ==========
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'http://localhost:8081',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, Accept',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Max-Age': '86400',
+};
 
-// ========== Handle OPTIONS (Preflight) ==========
-export async function OPTIONS(req: NextRequest) {
-  const origin = req.headers.get('origin');
-  const headers = getCorsHeaders(origin);
-  
+// ========== OPTIONS (Preflight) ==========
+export async function OPTIONS() {
   return new NextResponse(null, {
-    status: 200,
-    headers,
+    status: 204,
+    headers: CORS_HEADERS,
   });
 }
 
-// ========== POST /api/auth/signin-mobile ==========
+// ========== POST ==========
 export async function POST(req: NextRequest) {
   try {
-    const origin = req.headers.get('origin');
-    const headers = getCorsHeaders(origin);
-    
     const { email, password } = await req.json();
 
     console.log('📱 Mobile Sign in attempt:', email);
@@ -83,7 +65,7 @@ export async function POST(req: NextRequest) {
     if (user.length === 0) {
       return NextResponse.json(
         { error: 'Email atau password salah' },
-        { status: 401, headers }
+        { status: 401, headers: CORS_HEADERS }
       );
     }
 
@@ -91,7 +73,7 @@ export async function POST(req: NextRequest) {
     if (!user[0].isVerified) {
       return NextResponse.json(
         { error: 'Email belum diverifikasi. Silakan verifikasi terlebih dahulu.' },
-        { status: 400, headers }
+        { status: 400, headers: CORS_HEADERS }
       );
     }
 
@@ -100,20 +82,19 @@ export async function POST(req: NextRequest) {
       if (user[0].banExpiry) {
         const expiry = new Date(user[0].banExpiry);
         if (new Date() > expiry) {
-          // Auto unban jika expired
           await db.update(users)
             .set({ isBanned: false, banReason: null, banExpiry: null })
             .where(eq(users.id, user[0].id));
         } else {
           return NextResponse.json(
             { error: `Akun Anda sedang di-ban hingga ${new Date(user[0].banExpiry).toLocaleDateString('id-ID')}. Alasan: ${user[0].banReason || 'Melanggar aturan'}` },
-            { status: 403, headers }
+            { status: 403, headers: CORS_HEADERS }
           );
         }
       } else {
         return NextResponse.json(
           { error: `Akun Anda telah di-ban permanen. Alasan: ${user[0].banReason || 'Melanggar aturan'}. Hubungi administrator.` },
-          { status: 403, headers }
+          { status: 403, headers: CORS_HEADERS }
         );
       }
     }
@@ -123,7 +104,7 @@ export async function POST(req: NextRequest) {
     if (!validPassword) {
       return NextResponse.json(
         { error: 'Email atau password salah' },
-        { status: 401, headers }
+        { status: 401, headers: CORS_HEADERS }
       );
     }
 
@@ -148,7 +129,12 @@ export async function POST(req: NextRequest) {
         level: user[0].level,
         role: user[0].role,
       }
-    }, { headers });
+    });
+
+    // ✅ TAMBAHKAN CORS HEADERS
+    Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
 
     // Set cookie
     response.cookies.set('token', jwtToken, {
@@ -165,12 +151,10 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (error) {
     console.error('❌ Mobile Signin error:', error);
-    const origin = req.headers.get('origin');
-    const headers = getCorsHeaders(origin);
     
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500, headers }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }

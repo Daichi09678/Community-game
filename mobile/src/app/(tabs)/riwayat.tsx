@@ -268,7 +268,7 @@ export default function RiwayatPage() {
       <View style={styles.topbarLeft}>
         <LogoIcon />
         <View style={styles.userBadge}>
-          <Text style={styles.userBadgeText}>● USER</Text>
+          <Text style={styles.userBadgeText}>USER</Text>
         </View>
       </View>
       <View style={styles.topbarRight}>
@@ -301,8 +301,11 @@ export default function RiwayatPage() {
   const renderHeaderSubtitle = () => (
     <View style={styles.headerSubtitleContainer}>
       <Text style={styles.headerSubtitle}>
-        {gameLabels[activeGame]} · {totalItems} reports found
-        {searchQuery ? <Text style={styles.searchIndicator}> · Searching: "{searchQuery}"</Text> : null}
+        {gameLabels[activeGame]}
+        <Text style={styles.headerSubtitle}> · {totalItems} reports found</Text>
+        {searchQuery ? (
+          <Text style={styles.searchIndicator}> · Searching: "{searchQuery}"</Text>
+        ) : null}
       </Text>
     </View>
   );
@@ -368,7 +371,7 @@ export default function RiwayatPage() {
     </ScrollView>
   );
 
-  // ============ Search Result Indicator - FIXED ============
+  // ============ Search Result Indicator ============
   const renderSearchResult = () => {
     if (!searchQuery) {
       return null;
@@ -377,11 +380,12 @@ export default function RiwayatPage() {
     return (
       <View style={styles.searchResultIndicator}>
         <Text style={styles.searchResultText}>
-          Search results for: <Text style={styles.searchResultQuery}>"{searchQuery}"</Text>
+          Search results for: 
+          <Text style={styles.searchResultQuery}> "{searchQuery}"</Text>
           <Text style={styles.searchResultCount}> ({reports.length} reports)</Text>
         </Text>
         <TouchableOpacity onPress={clearSearch}>
-          <Text style={styles.clearSearchResult}>✕ Clear</Text>
+          <Text style={styles.clearSearchResult}>Clear</Text>
         </TouchableOpacity>
       </View>
     );
@@ -454,12 +458,11 @@ export default function RiwayatPage() {
         <Text style={styles.emptySubtitle}>
           {hasSearch ? 'Try a different search term' : 'Create your first report now'}
         </Text>
-        {!hasSearch && (
+        {!hasSearch ? (
           <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/pengaduan' as any)}>
-            <Text style={styles.emptyButtonText}>+ Write Report</Text>
+            <Text style={styles.emptyButtonText}>Write Report</Text>
           </TouchableOpacity>
-        )}
-        {hasSearch && (
+        ) : (
           <TouchableOpacity style={styles.emptyButton} onPress={clearSearch}>
             <Text style={styles.emptyButtonText}>Clear Search</Text>
           </TouchableOpacity>
@@ -508,35 +511,31 @@ export default function RiwayatPage() {
             <Text style={styles.reportsCount}>{totalItems} items</Text>
           </View>
           
-          {reports.length === 0 ? (
-            renderEmpty()
-          ) : (
-            <FlatList
-              data={reports}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={renderReportItem}
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor="#C8A96E"
-                  colors={["#C8A96E"]}
-                />
-              }
-              onEndReached={loadMore}
-              onEndReachedThreshold={0.3}
-              ListFooterComponent={
-                loading && reports.length > 0 ? (
-                  <View style={styles.loaderMore}>
-                    <ActivityIndicator size="small" color="#C8A96E" />
-                  </View>
-                ) : null
-              }
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={renderEmpty}
-            />
-          )}
+          <FlatList
+            data={reports}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderReportItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#C8A96E"
+                colors={["#C8A96E"]}
+              />
+            }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={
+              loading && reports.length > 0 ? (
+                <View style={styles.loaderMore}>
+                  <ActivityIndicator size="small" color="#C8A96E" />
+                </View>
+              ) : null
+            }
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={renderEmpty}
+          />
         </View>
         
         <View style={styles.bottomPadding} />

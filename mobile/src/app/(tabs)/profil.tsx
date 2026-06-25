@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+// mobile/src/app/(tabs)/profil.tsx
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +11,6 @@ import {
   ScrollView,
   TextInput,
   Image,
-  Modal,
   StatusBar,
   Platform,
 } from 'react-native';
@@ -17,8 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-
-const API_URL = 'http://localhost:5000/api';
+import { api, profileAPI } from '../../services/api';
 
 // ============ Types ============
 interface User {
@@ -37,6 +37,7 @@ interface User {
   level?: number;
   xp?: number;
   favGames?: string[];
+  bannerId?: string;
 }
 
 interface Activity {
@@ -77,6 +78,7 @@ export default function ProfilPage() {
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
+  const [fromCache, setFromCache] = useState(false);
   
   // Edit form state
   const [editNama, setEditNama] = useState('');
@@ -90,34 +92,130 @@ export default function ProfilPage() {
   // ============ Fetch Profile ============
   const fetchProfile = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        router.replace('/login');
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        const userData = result.user;
-        setUser(userData);
-        setEditNama(userData.nama || '');
-        setEditBio(userData.bio || '');
-        setEditLocation(userData.location || '');
-        setAvatarPhoto(userData.avatarPhoto || null);
-        setBannerPhoto(userData.bannerPhoto || null);
-        setEditFavGames(userData.favGames || ['hsr', 'gi']);
-        setBannerId(userData.bannerId || 'default');
+      console.log('📡 [Profile] Fetching profile...');
+      
+      // Gunakan profileAPI.getMyProfile() dengan fallback
+      const response = await profileAPI.getMyProfile();
+      
+      console.log('📡 [Profile] Response:', response);
+      
+      // Handle response
+      let userData;
+      if (response.fromCache) {
+        // Data dari cache
+        userData = response.user;
+        setFromCache(true);
+        console.log('📦 [Profile] Using cached data');
+      } else if (response.success && response.user) {
+        userData = response.user;
+        setFromCache(false);
+      } else if (response.id || response.username) {
+        userData = response;
+        setFromCache(false);
       } else {
-        await AsyncStorage.removeItem('token');
-        await AsyncStorage.removeItem('user');
-        router.replace('/login');
+        throw new Error('Invalid user data format');
       }
-    } catch (error) {
-      console.error('Fetch profile error:', error);
+      
+      // Set user data
+      setUser({
+        id: userData.id || 0,
+        nama: userData.nama || userData.username || '',
+        email: userData.email || '',
+        role: userData.role || 'user',
+        created_at: userData.created_at || userData.createdAt || new Date().toISOString(),
+        bio: userData.bio || '',
+        location: userData.location || '',
+        avatarPhoto: userData.avatarPhoto || null,
+        bannerPhoto: userData.bannerPhoto || null,
+        totalReports: userData.totalReports || 0,
+        totalVotes: userData.totalVotes || 0,
+        rank: userData.rank || 'Novice Omni-Voyager',
+        level: userData.level || 1,
+        xp: userData.xp || 0,
+        favGames: userData.favGames || ['hsr', 'gi'],
+        bannerId: userData.bannerId || 'default',
+      });
+      
+      setEditNama(userData.nama || userData.username || '');
+      setEditBio(userData.bio || '');
+      setEditLocation(userData.location || '');
+      setAvatarPhoto(userData.avatarPhoto || null);
+      setBannerPhoto(userData.bannerPhoto || null);
+      setEditFavGames(userData.favGames || ['hsr', 'gi']);
+      setBannerId(userData.bannerId || 'default');
+      
+      // Simpan ke AsyncStorage
+      await AsyncStorage.setItem('user', JSON.stringify({
+        id: userData.id || 0,
+        nama: userData.nama || userData.username || '',
+        username: userData.username || userData.nama || '',
+        email: userData.email || '',
+        role: userData.role || 'user',
+        created_at: userData.created_at || userData.createdAt || new Date().toISOString(),
+        bio: userData.bio || '',
+        location: userData.location || '',
+        avatarPhoto: userData.avatarPhoto || null,
+        bannerPhoto: userData.bannerPhoto || null,
+        totalReports: userData.totalReports || 0,
+        totalVotes: userData.totalVotes || 0,
+        rank: userData.rank || 'Novice Omni-Voyager',
+        level: userData.level || 1,
+        xp: userData.xp || 0,
+        favGames: userData.favGames || ['hsr', 'gi'],
+        bannerId: userData.bannerId || 'default',
+      }));
+      
+      console.log('✅ [Profile] Profile loaded successfully');
+      
+    } catch (error: any) {
+      console.error('❌ [Profile] Fetch error:', error.message);
+      
+      // Fallback terakhir: Baca dari AsyncStorage
+      try {
+        const savedUser = await AsyncStorage.getItem('user');
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          console.log('📦 [Profile] Last resort: using AsyncStorage');
+          
+          setUser({
+            id: parsed.id || 0,
+            nama: parsed.nama || parsed.username || '',
+            email: parsed.email || '',
+            role: parsed.role || 'user',
+            created_at: parsed.created_at || parsed.createdAt || new Date().toISOString(),
+            bio: parsed.bio || '',
+            location: parsed.location || '',
+            avatarPhoto: parsed.avatarPhoto || null,
+            bannerPhoto: parsed.bannerPhoto || null,
+            totalReports: parsed.totalReports || 0,
+            totalVotes: parsed.totalVotes || 0,
+            rank: parsed.rank || 'Novice Omni-Voyager',
+            level: parsed.level || 1,
+            xp: parsed.xp || 0,
+            favGames: parsed.favGames || ['hsr', 'gi'],
+            bannerId: parsed.bannerId || 'default',
+          });
+          
+          setEditNama(parsed.nama || parsed.username || '');
+          setEditBio(parsed.bio || '');
+          setEditLocation(parsed.location || '');
+          setAvatarPhoto(parsed.avatarPhoto || null);
+          setBannerPhoto(parsed.bannerPhoto || null);
+          setEditFavGames(parsed.favGames || ['hsr', 'gi']);
+          setBannerId(parsed.bannerId || 'default');
+          setFromCache(true);
+          return;
+        }
+      } catch (e) {
+        console.error('Error parsing saved user:', e);
+      }
+      
+      // Jika semua gagal, redirect ke login
+      Alert.alert(
+        'Error',
+        'Gagal memuat profil. Silakan login kembali.',
+        [{ text: 'OK', onPress: () => router.replace('/login') }]
+      );
     } finally {
       setLoading(false);
     }
@@ -127,18 +225,28 @@ export default function ProfilPage() {
   const fetchActivities = async () => {
     setActivityLoading(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch(`${API_URL}/user/recent-activity`, {
-        headers: { Authorization: `Bearer ${token}` },
+      console.log('📡 [Profile] Fetching activities from /dashboard/reports?limit=5');
+      const response = await api.get('/dashboard/reports', { 
+        params: { limit: 5 } 
       });
-      const result = await response.json();
-      if (result.success) {
-        setActivities(result.activities || []);
+      
+      if (response.data.success) {
+        const reports = response.data.reports || [];
+        const formattedActivities = reports.map((report: any) => ({
+          id: report.id || Math.random().toString(),
+          title: report.title || 'Untitled',
+          type: report.type || 'report',
+          tag: report.game || 'general',
+          tagColor: '#C8A96E',
+          votes: report.votes || 0,
+          time: report.date || new Date().toISOString().slice(0, 10),
+        }));
+        setActivities(formattedActivities);
       }
-    } catch (error) {
-      console.error('Fetch activities error:', error);
+    } catch (error: any) {
+      console.error('Fetch activities error:', error.message);
+      // Jika gagal, tetap tampilkan halaman tanpa activities
+      setActivities([]);
     } finally {
       setActivityLoading(false);
     }
@@ -146,8 +254,20 @@ export default function ProfilPage() {
 
   // ============ Load Data ============
   useEffect(() => {
-    fetchProfile();
-    fetchActivities();
+    let isMounted = true;
+    
+    const loadData = async () => {
+      if (isMounted) {
+        await fetchProfile();
+        await fetchActivities();
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // ============ Handle Avatar Upload ============
@@ -172,20 +292,27 @@ export default function ProfilPage() {
       
       setUploadingAvatar(true);
       try {
-        const token = await AsyncStorage.getItem('token');
-        await fetch(`${API_URL}/profile/update`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ avatarPhoto: base64String }),
+        const response = await profileAPI.updateProfile({
+          avatarPhoto: base64String
         });
         
-        setAvatarPhoto(base64String);
-        setUser(prev => prev ? { ...prev, avatarPhoto: base64String } : prev);
-        Alert.alert('Success', 'Avatar updated!');
+        if (response.success) {
+          setAvatarPhoto(base64String);
+          setUser(prev => prev ? { ...prev, avatarPhoto: base64String } : prev);
+          
+          // Update AsyncStorage
+          const savedUser = await AsyncStorage.getItem('user');
+          if (savedUser) {
+            const userData = JSON.parse(savedUser);
+            userData.avatarPhoto = base64String;
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+          }
+          Alert.alert('Success', 'Avatar updated!');
+        } else {
+          Alert.alert('Error', response.error || 'Failed to update avatar');
+        }
       } catch (error) {
+        console.error('Upload avatar error:', error);
         Alert.alert('Error', 'Failed to upload avatar');
       } finally {
         setUploadingAvatar(false);
@@ -215,20 +342,30 @@ export default function ProfilPage() {
       
       setUploadingBanner(true);
       try {
-        const token = await AsyncStorage.getItem('token');
-        await fetch(`${API_URL}/profile/update`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ bannerPhoto: base64String, bannerId: 'custom' }),
+        const response = await profileAPI.updateProfile({
+          bannerPhoto: base64String,
+          bannerId: 'custom'
         });
         
-        setBannerPhoto(base64String);
-        setUser(prev => prev ? { ...prev, bannerPhoto: base64String } : prev);
-        Alert.alert('Success', 'Banner updated!');
+        if (response.success) {
+          setBannerPhoto(base64String);
+          setBannerId('custom');
+          setUser(prev => prev ? { ...prev, bannerPhoto: base64String, bannerId: 'custom' } : prev);
+          
+          // Update AsyncStorage
+          const savedUser = await AsyncStorage.getItem('user');
+          if (savedUser) {
+            const userData = JSON.parse(savedUser);
+            userData.bannerPhoto = base64String;
+            userData.bannerId = 'custom';
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+          }
+          Alert.alert('Success', 'Banner updated!');
+        } else {
+          Alert.alert('Error', response.error || 'Failed to update banner');
+        }
       } catch (error) {
+        console.error('Upload banner error:', error);
         Alert.alert('Error', 'Failed to upload banner');
       } finally {
         setUploadingBanner(false);
@@ -238,81 +375,129 @@ export default function ProfilPage() {
 
   // ============ Reset Avatar ============
   const resetAvatar = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      await fetch(`${API_URL}/profile/update`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+    Alert.alert(
+      'Reset Avatar',
+      'Are you sure you want to reset your avatar?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await profileAPI.updateProfile({
+                avatarPhoto: null
+              });
+              
+              if (response.success) {
+                setAvatarPhoto(null);
+                setUser(prev => prev ? { ...prev, avatarPhoto: null } : prev);
+                
+                // Update AsyncStorage
+                const savedUser = await AsyncStorage.getItem('user');
+                if (savedUser) {
+                  const userData = JSON.parse(savedUser);
+                  userData.avatarPhoto = null;
+                  await AsyncStorage.setItem('user', JSON.stringify(userData));
+                }
+                Alert.alert('Success', 'Avatar reset to default');
+              } else {
+                Alert.alert('Error', response.error || 'Failed to reset avatar');
+              }
+            } catch (error) {
+              console.error('Reset avatar error:', error);
+              Alert.alert('Error', 'Failed to reset avatar');
+            }
+          },
         },
-        body: JSON.stringify({ avatarPhoto: null }),
-      });
-      
-      setAvatarPhoto(null);
-      setUser(prev => prev ? { ...prev, avatarPhoto: null } : prev);
-      Alert.alert('Success', 'Avatar reset to default');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reset avatar');
-    }
+      ]
+    );
   };
 
   // ============ Reset Banner ============
   const resetBanner = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      await fetch(`${API_URL}/profile/update`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+    Alert.alert(
+      'Reset Banner',
+      'Are you sure you want to reset your banner?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await profileAPI.updateProfile({
+                bannerPhoto: null,
+                bannerId: 'default'
+              });
+              
+              if (response.success) {
+                setBannerPhoto(null);
+                setBannerId('default');
+                setUser(prev => prev ? { ...prev, bannerPhoto: null, bannerId: 'default' } : prev);
+                
+                // Update AsyncStorage
+                const savedUser = await AsyncStorage.getItem('user');
+                if (savedUser) {
+                  const userData = JSON.parse(savedUser);
+                  userData.bannerPhoto = null;
+                  userData.bannerId = 'default';
+                  await AsyncStorage.setItem('user', JSON.stringify(userData));
+                }
+                Alert.alert('Success', 'Banner reset to default');
+              } else {
+                Alert.alert('Error', response.error || 'Failed to reset banner');
+              }
+            } catch (error) {
+              console.error('Reset banner error:', error);
+              Alert.alert('Error', 'Failed to reset banner');
+            }
+          },
         },
-        body: JSON.stringify({ bannerPhoto: null, bannerId: 'default' }),
-      });
-      
-      setBannerPhoto(null);
-      setBannerId('default');
-      setUser(prev => prev ? { ...prev, bannerPhoto: null, bannerId: 'default' } : prev);
-      Alert.alert('Success', 'Banner reset to default');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reset banner');
-    }
+      ]
+    );
   };
 
   // ============ Save Profile ============
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/profile/update`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          nama: editNama,
-          bio: editBio,
-          location: editLocation,
-          favGames: editFavGames,
-        }),
+      const response = await profileAPI.updateProfile({
+        username: editNama,
+        bio: editBio,
+        location: editLocation,
+        favGames: editFavGames,
       });
 
-      const result = await response.json();
-      if (result.success) {
+      if (response.success) {
         setUser(prev => prev ? {
           ...prev,
           nama: editNama,
           bio: editBio,
           location: editLocation,
           favGames: editFavGames,
-        } : prev);
+        } : null);
+        
         setIsEditing(false);
+        
+        // Update AsyncStorage
+        const savedUser = await AsyncStorage.getItem('user');
+        if (savedUser) {
+          const userData = JSON.parse(savedUser);
+          userData.nama = editNama;
+          userData.username = editNama;
+          userData.bio = editBio;
+          userData.location = editLocation;
+          userData.favGames = editFavGames;
+          await AsyncStorage.setItem('user', JSON.stringify(userData));
+        }
+        
         Alert.alert('Success', 'Profile updated!');
       } else {
-        Alert.alert('Error', result.error || 'Failed to update profile');
+        Alert.alert('Error', response.error || 'Failed to update profile');
       }
     } catch (error) {
+      console.error('Save profile error:', error);
       Alert.alert('Error', 'Failed to save profile');
     } finally {
       setSaving(false);
@@ -331,10 +516,15 @@ export default function ProfilPage() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Hapus semua data user dari AsyncStorage
               await AsyncStorage.removeItem('token');
               await AsyncStorage.removeItem('user');
+              
+              // Redirect ke halaman login dan reset navigation stack
+              // Gunakan replace agar tidak bisa kembali dengan back button
               router.replace('/login');
             } catch (error) {
+              console.error('Logout error:', error);
               Alert.alert('Error', 'Gagal logout, silakan coba lagi');
             }
           },
@@ -371,6 +561,13 @@ export default function ProfilPage() {
       showsVerticalScrollIndicator={false}
     >
       <StatusBar barStyle="light-content" backgroundColor="#050810" />
+
+      {/* Cache indicator */}
+      {fromCache && (
+        <View style={styles.cacheIndicator}>
+          <Text style={styles.cacheText}>📦 Using cached data</Text>
+        </View>
+      )}
 
       {/* ====== Banner ====== */}
       <TouchableOpacity 
@@ -663,7 +860,6 @@ export default function ProfilPage() {
 
 // ============ Styles ============
 const styles = StyleSheet.create({
-  // Container
   container: {
     flex: 1,
     backgroundColor: '#050810',
@@ -686,8 +882,17 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 40,
   },
-
-  // Banner
+  cacheIndicator: {
+    backgroundColor: 'rgba(200,169,110,0.1)',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  cacheText: {
+    color: '#C8A96E',
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Space Mono' : 'monospace',
+  },
   bannerContainer: {
     height: 140,
     width: '100%',
@@ -706,11 +911,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0f1e',
   },
   bannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(5,8,16,0.3)',
   },
   bannerOverlayEdit: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -733,13 +938,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   bannerLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(5,8,16,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Profile Header
   profileHeader: {
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -775,7 +978,7 @@ const styles = StyleSheet.create({
     color: '#C8A96E',
   },
   avatarLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(5,8,16,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -793,7 +996,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#050810',
   },
-
   userInfo: {
     flex: 1,
   },
@@ -821,7 +1023,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontFamily: Platform.OS === 'ios' ? 'Space Mono' : 'monospace',
   },
-
   rankBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -838,8 +1039,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontFamily: Platform.OS === 'ios' ? 'Space Mono' : 'monospace',
   },
-
-  // Location
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -864,8 +1063,6 @@ const styles = StyleSheet.create({
     color: '#5A5248',
     fontFamily: Platform.OS === 'ios' ? 'Space Mono' : 'monospace',
   },
-
-  // XP
   xpContainer: {
     paddingHorizontal: 20,
     paddingBottom: 16,
@@ -897,8 +1094,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#C8A96E',
     borderRadius: 2,
   },
-
-  // Stats Row
   statsRow: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -928,8 +1123,6 @@ const styles = StyleSheet.create({
     width: 1,
     backgroundColor: 'rgba(200,169,110,0.08)',
   },
-
-  // Section
   section: {
     paddingHorizontal: 20,
     marginBottom: 16,
@@ -952,8 +1145,6 @@ const styles = StyleSheet.create({
     color: '#C8A96E',
     fontWeight: '600',
   },
-
-  // Games
   gamesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -974,8 +1165,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-
-  // Bio
   inputBio: {
     backgroundColor: 'rgba(200,169,110,0.06)',
     borderWidth: 1,
@@ -993,8 +1182,6 @@ const styles = StyleSheet.create({
     color: '#9A8F78',
     lineHeight: 20,
   },
-
-  // Activity
   activityLoading: {
     paddingVertical: 20,
     alignItems: 'center',
@@ -1061,8 +1248,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 16,
   },
-
-  // Action Buttons
   actionsContainer: {
     flexDirection: 'row',
     gap: 10,
@@ -1112,8 +1297,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-
-  // Reset Buttons
   resetContainer: {
     flexDirection: 'row',
     gap: 10,
@@ -1139,8 +1322,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-
-  // Logout
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
